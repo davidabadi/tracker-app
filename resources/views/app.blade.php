@@ -34,6 +34,11 @@
         <link rel="icon" href="/favicon.svg" type="image/svg+xml">
         <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
+        {{-- PWA manifest (built by vite-plugin-pwa, served from the root route) --}}
+        <link rel="manifest" href="/manifest.webmanifest">
+        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+        <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+
         @fonts
 
         @viteReactRefresh
