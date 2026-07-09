@@ -44,7 +44,43 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+/**
+ * Fake the TMDB endpoints hit while building a show/movie (id 1399 / 603) so the
+ * real TmdbService parsing runs against controlled data — no network involved.
+ * Shared by the tracking feature tests.
+ */
+function fakeTmdb(): void
 {
-    // ..
+    \Illuminate\Support\Facades\Http::fake([
+        'api.themoviedb.org/3/tv/1399/season/1*' => \Illuminate\Support\Facades\Http::response([
+            'episodes' => [
+                ['season_number' => 1, 'episode_number' => 1, 'name' => 'Ep1', 'still_path' => '/s1e1.jpg', 'overview' => 'o1', 'air_date' => '2020-01-01', 'runtime' => 42],
+                ['season_number' => 1, 'episode_number' => 2, 'name' => 'Ep2', 'still_path' => null, 'overview' => '', 'air_date' => '', 'runtime' => 45],
+            ],
+        ]),
+        'api.themoviedb.org/3/tv/1399/season/2*' => \Illuminate\Support\Facades\Http::response([
+            'episodes' => [
+                ['season_number' => 2, 'episode_number' => 1, 'name' => 'S2E1', 'still_path' => '/s2e1.jpg', 'overview' => 'o', 'air_date' => '2021-01-01', 'runtime' => 50],
+            ],
+        ]),
+        'api.themoviedb.org/3/tv/1399*' => \Illuminate\Support\Facades\Http::response([
+            'id' => 1399,
+            'name' => 'Test Show',
+            'poster_path' => '/poster.jpg',
+            'backdrop_path' => '/backdrop.jpg',
+            'overview' => 'A show overview',
+            'seasons' => [
+                ['season_number' => 1],
+                ['season_number' => 2],
+            ],
+        ]),
+        'api.themoviedb.org/3/movie/603*' => \Illuminate\Support\Facades\Http::response([
+            'id' => 603,
+            'title' => 'The Matrix',
+            'poster_path' => '/matrix.jpg',
+            'overview' => 'A movie overview',
+            'release_date' => '1999-03-31',
+            'runtime' => 136,
+        ]),
+    ]);
 }

@@ -2,9 +2,12 @@
 
 namespace App\Providers;
 
+use App\Models\Movie;
+use App\Models\Show;
 use App\Services\Metadata\MediaMetadataProvider;
 use App\Services\Metadata\Tmdb\TmdbService;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
@@ -42,6 +45,13 @@ class AppServiceProvider extends ServiceProvider
     protected function configureDefaults(): void
     {
         Date::use(CarbonImmutable::class);
+
+        // media_external_ids.media_type stores 'show'|'movie' (spec §3), not
+        // model class names, so pin the polymorphic aliases explicitly.
+        Relation::enforceMorphMap([
+            'show' => Show::class,
+            'movie' => Movie::class,
+        ]);
 
         DB::prohibitDestructiveCommands(
             app()->isProduction(),

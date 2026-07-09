@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -46,5 +47,26 @@ class User extends Authenticatable implements PasskeyUser
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
         ];
+    }
+
+    /**
+     * This user's show list membership + status rows. Every tracking read/write
+     * goes through here so it is inherently scoped to the user (spec §1 privacy).
+     *
+     * @return HasMany<UserShowTracking, $this>
+     */
+    public function showTrackings(): HasMany
+    {
+        return $this->hasMany(UserShowTracking::class);
+    }
+
+    /**
+     * This user's movie watched-state rows. Scoped to the user, like shows.
+     *
+     * @return HasMany<UserMovieTracking, $this>
+     */
+    public function movieTrackings(): HasMany
+    {
+        return $this->hasMany(UserMovieTracking::class);
     }
 }
