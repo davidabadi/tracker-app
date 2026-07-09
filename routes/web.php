@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\EpisodeWatchController;
 use App\Http\Controllers\MovieTrackingController;
 use App\Http\Controllers\ShowTrackingController;
 use Illuminate\Support\Facades\DB;
@@ -13,7 +14,7 @@ Route::get('/health', function () {
     try {
         DB::connection()->getPdo();
         $database = 'ok';
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
         return response()->json([
             'status' => 'error',
             'database' => 'unreachable',
@@ -40,8 +41,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('track/movies', [MovieTrackingController::class, 'store'])
         ->name('track.movies.store');
-    Route::patch('track/movies/{tracking}/watched', [MovieTrackingController::class, 'toggleWatched'])
+    // Keyed by the shared movie id: auto-creates this user's tracking row if the
+    // movie isn't tracked yet, then toggles watched (spec item 6 correction).
+    Route::patch('track/movies/{movie}/watched', [MovieTrackingController::class, 'toggleWatched'])
         ->name('track.movies.watched');
+
+    // Per-user episode watched state (spec §10 item 6). Keyed by shared
+    // episode/show ids; the per-user watch rows are always scoped to the current
+    // user inside the controller, which also auto-tracks the show as "watching".
+    Route::patch('track/episodes/{episode}/watched', [EpisodeWatchController::class, 'toggle'])
+        ->name('track.episodes.watched');
+    Route::patch('track/shows/{show}/seasons/{season}/watched', [EpisodeWatchController::class, 'toggleSeason'])
+        ->name('track.shows.seasons.watched');
+    Route::get('track/shows/{show}/episodes', [EpisodeWatchController::class, 'index'])
+        ->name('track.shows.episodes');
 });
 
 require __DIR__.'/settings.php';

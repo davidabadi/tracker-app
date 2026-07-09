@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Http\Requests\TrackMovieRequest;
+use App\Models\Movie;
 use App\Models\UserMovieTracking;
 use App\Services\Library\MediaLibraryService;
 use Illuminate\Http\JsonResponse;
@@ -14,9 +15,10 @@ use Illuminate\Http\Request;
  * Movie tracking for the logged-in user (spec §10 item 5): add a movie to their
  * list (starts unwatched) and toggle its watched state.
  *
- * Scoped to the authenticated user exactly like show tracking — the toggle
- * resolves the row through $request->user()->movieTrackings(), so a foreign id
- * 404s rather than exposing or mutating another user's data.
+ * Scoped to the authenticated user: the toggle keys off the *shared* Movie plus
+ * the current user, resolving the per-user row through
+ * $request->user()->movieTrackings(). A user only ever touches their own row, so
+ * there's no foreign tracking id to guess.
  *
  * Responses are JSON for now (see ShowTrackingController for the rationale).
  */
@@ -47,18 +49,25 @@ class MovieTrackingController extends Controller
     }
 
     /**
-     * Toggle one of this user's tracked movies watched/unwatched. watched_date
-     * is auto-stamped on watch and cleared on unwatch (spec §4/§9).
+     * Toggle a movie watched/unwatched for this user. watched_date is
+     * auto-stamped on watch and cleared on unwatch (spec §4/§9).
+     *
+     * Keyed by the shared Movie, not by a tracking-row id: per the item 6 design
+     * correction, marking an *untracked* movie watched must just work — so the
+     * user's tracking row is find-or-created first, then toggled. (Movies have no
+     * status field, so there's nothing to default the way shows default to
+     * "watching".)
      */
-    public function toggleWatched(Request $request, int $tracking): JsonResponse
+    public function toggleWatched(Request $request, Movie $movie): JsonResponse
     {
-        // Scoped to the user's own rows — a foreign tracking id 404s here.
-        $model = $request->user()->movieTrackings()->findOrFail($tracking);
+        $tracking = $request->user()->movieTrackings()->firstOrCreate(
+            ['movie_id' => $movie->id],
+        );
 
-        $model->toggleWatched();
-        $model->save();
+        $tracking->toggleWatched();
+        $tracking->save();
 
-        return response()->json(['tracking' => $this->present($model)]);
+        return response()->json(['tracking' => $this->present($tracking)]);
     }
 
     /**

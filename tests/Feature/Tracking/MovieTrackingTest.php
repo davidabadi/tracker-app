@@ -47,7 +47,7 @@ it('toggles watched on and stamps a watched_date, then back off', function () {
 
     // On: watched true + watched_date set.
     $this->actingAs($user)
-        ->patchJson(route('track.movies.watched', $tracking))
+        ->patchJson(route('track.movies.watched', $movie))
         ->assertOk()
         ->assertJsonPath('tracking.watched', true);
 
@@ -57,7 +57,7 @@ it('toggles watched on and stamps a watched_date, then back off', function () {
 
     // Off again: watched false + watched_date cleared.
     $this->actingAs($user)
-        ->patchJson(route('track.movies.watched', $tracking))
+        ->patchJson(route('track.movies.watched', $movie))
         ->assertOk()
         ->assertJsonPath('tracking.watched', false)
         ->assertJsonPath('tracking.watched_date', null);
@@ -67,16 +67,39 @@ it('toggles watched on and stamps a watched_date, then back off', function () {
         ->and($tracking->watched_date)->toBeNull();
 });
 
-it('does not let a user toggle another user\'s movie tracking', function () {
+it('auto-tracks an untracked movie when first marked watched', function () {
+    $user = User::factory()->create();
+    $movie = Movie::factory()->create();
+
+    // No tracking row exists yet — marking watched should create one, then flip.
+    expect(UserMovieTracking::where('user_id', $user->id)->count())->toBe(0);
+
+    $this->actingAs($user)
+        ->patchJson(route('track.movies.watched', $movie))
+        ->assertOk()
+        ->assertJsonPath('tracking.watched', true);
+
+    $this->assertDatabaseHas('user_movie_tracking', [
+        'user_id' => $user->id,
+        'movie_id' => $movie->id,
+        'watched' => true,
+    ]);
+    expect(UserMovieTracking::where('user_id', $user->id)->count())->toBe(1);
+});
+
+it('keeps each user\'s movie watched state isolated', function () {
     $owner = User::factory()->create();
     $intruder = User::factory()->create();
     $movie = Movie::factory()->create();
     $tracking = $owner->movieTrackings()->create(['movie_id' => $movie->id, 'watched' => false]);
 
+    // The intruder toggling the same shared movie only ever affects their own
+    // row — the owner's stays untouched.
     $this->actingAs($intruder)
-        ->patchJson(route('track.movies.watched', $tracking))
-        ->assertNotFound();
+        ->patchJson(route('track.movies.watched', $movie))
+        ->assertOk()
+        ->assertJsonPath('tracking.watched', true);
 
-    // The owner's row is untouched.
     expect($tracking->fresh()->watched)->toBeFalse();
+    expect(UserMovieTracking::where('movie_id', $movie->id)->count())->toBe(2);
 });

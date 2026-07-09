@@ -69,4 +69,16 @@ class User extends Authenticatable implements PasskeyUser
     {
         return $this->hasMany(UserMovieTracking::class);
     }
+
+    /**
+     * This user's per-episode watched-state rows. Scoped to the user, like the
+     * others — episode toggles resolve through here so one member can never read
+     * or flip another's watch data (spec §1 privacy, build-order item 6).
+     *
+     * @return HasMany<UserEpisodeWatch, $this>
+     */
+    public function episodeWatches(): HasMany
+    {
+        return $this->hasMany(UserEpisodeWatch::class);
+    }
 }
