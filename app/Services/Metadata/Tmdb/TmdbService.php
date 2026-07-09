@@ -51,18 +51,18 @@ final class TmdbService implements MediaMetadataProvider
 
     public function searchShows(string $query): array
     {
-        return array_map(
+        return array_values(array_map(
             fn (array $row): SearchResult => $this->toShowResult($row),
             $this->get('/search/tv', ['query' => $query])['results'] ?? [],
-        );
+        ));
     }
 
     public function searchMovies(string $query): array
     {
-        return array_map(
+        return array_values(array_map(
             fn (array $row): SearchResult => $this->toMovieResult($row),
             $this->get('/search/movie', ['query' => $query])['results'] ?? [],
-        );
+        ));
     }
 
     public function fetchShowDetails(int $tmdbId): ShowDetails
@@ -139,6 +139,9 @@ final class TmdbService implements MediaMetadataProvider
         );
     }
 
+    /**
+     * @param  array<string, mixed>  $row
+     */
     private function toShowResult(array $row): SearchResult
     {
         return new SearchResult(
@@ -150,6 +153,9 @@ final class TmdbService implements MediaMetadataProvider
         );
     }
 
+    /**
+     * @param  array<string, mixed>  $row
+     */
     private function toMovieResult(array $row): SearchResult
     {
         return new SearchResult(
