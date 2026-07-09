@@ -3,6 +3,7 @@
 use App\Http\Controllers\EpisodeWatchController;
 use App\Http\Controllers\MovieTrackingController;
 use App\Http\Controllers\ShowTrackingController;
+use App\Http\Controllers\UpcomingController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -55,6 +56,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('track.shows.seasons.watched');
     Route::get('track/shows/{show}/episodes', [EpisodeWatchController::class, 'index'])
         ->name('track.shows.episodes');
+
+    // Per-user "Upcoming" feed (spec §6): future episodes/movies from the shows
+    // and movies this user tracks, derived by query and scoped to the current
+    // user inside the controller.
+    Route::get('upcoming/episodes', [UpcomingController::class, 'episodes'])
+        ->name('upcoming.episodes');
+    Route::get('upcoming/movies', [UpcomingController::class, 'movies'])
+        ->name('upcoming.movies');
 });
 
 require __DIR__.'/settings.php';

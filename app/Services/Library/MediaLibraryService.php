@@ -55,6 +55,79 @@ final readonly class MediaLibraryService
     }
 
     /**
+     * Re-pull a show's full season/episode list from TMDB and reconcile it into
+     * our own tables (spec §6, nightly refresh). Unlike findOrCreateShow(), this
+     * always fetches: it upserts every season by (show_id, season_number) and
+     * every episode by (show_id, season_number, episode_number) — refreshing
+     * air_date/runtime and picking up any newly-added episodes or seasons. A show
+     * with no TMDB link is skipped (nothing to refresh against).
+     */
+    public function refreshShow(Show $show): void
+    {
+        $tmdbId = $this->tmdbIdFor(MediaType::Show, $show->id);
+
+        if ($tmdbId === null) {
+            return;
+        }
+
+        $details = $this->tmdb->fetchShowDetails($tmdbId);
+
+        DB::transaction(function () use ($show, $details): void {
+            foreach ($details->seasons as $season) {
+                $show->seasons()->updateOrCreate(
+                    ['season_number' => $season->seasonNumber],
+                    ['episode_count' => $season->episodeCount],
+                );
+
+                foreach ($season->episodes as $episode) {
+                    $show->episodes()->updateOrCreate(
+                        [
+                            'season_number' => $episode->seasonNumber,
+                            'episode_number' => $episode->episodeNumber,
+                        ],
+                        [
+                            'title' => $episode->title,
+                            'still_image_url' => $this->tmdb->imageUrl($episode->stillPath),
+                            'overview' => $episode->overview,
+                            'air_date' => $episode->airDate,
+                            'runtime_minutes' => $episode->runtimeMinutes,
+                        ],
+                    );
+                }
+            }
+        });
+    }
+
+    /**
+     * Refresh a movie's release_date/runtime from TMDB (spec §6). Only ever
+     * called for movies still missing one of those values; a fetched value never
+     * overwrites a confirmed one with an empty placeholder, so a movie converges
+     * on confirmed data and then stops qualifying for refresh. TMDB reports an
+     * unknown runtime as 0 (not null) for unreleased films, so a 0 is treated as
+     * "not yet confirmed" — never written over a real runtime, and never taken as
+     * confirmation. A movie with no TMDB link is skipped.
+     */
+    public function refreshMovie(Movie $movie): void
+    {
+        $tmdbId = $this->tmdbIdFor(MediaType::Movie, $movie->id);
+
+        if ($tmdbId === null) {
+            return;
+        }
+
+        $details = $this->tmdb->fetchMovieDetails($tmdbId);
+
+        $runtime = ($details->runtimeMinutes !== null && $details->runtimeMinutes > 0)
+            ? $details->runtimeMinutes
+            : $movie->runtime_minutes;
+
+        $movie->update([
+            'release_date' => $details->releaseDate ?? $movie->release_date,
+            'runtime_minutes' => $runtime,
+        ]);
+    }
+
+    /**
      * Find our Movie for this TMDB id, or create it by pulling full details
      * from TMDB. Idempotent, like findOrCreateShow().
      */
@@ -137,6 +210,21 @@ final readonly class MediaLibraryService
             MediaType::Show => Show::find($link->media_id),
             MediaType::Movie => Movie::find($link->media_id),
         };
+    }
+
+    /**
+     * Resolve the TMDB external id recorded for an existing Show/Movie row, or
+     * null if the household has no TMDB link for it (nothing to refresh against).
+     */
+    private function tmdbIdFor(MediaType $type, int $mediaId): ?int
+    {
+        $link = MediaExternalId::query()
+            ->where('provider', self::PROVIDER)
+            ->where('media_type', $type->value)
+            ->where('media_id', $mediaId)
+            ->first();
+
+        return $link !== null ? (int) $link->external_id : null;
     }
 
     private function linkExternalId(MediaType $type, int $mediaId, int $tmdbId): void
