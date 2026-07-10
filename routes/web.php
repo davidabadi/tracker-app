@@ -103,13 +103,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('track/shows/{show}/episodes', [EpisodeWatchController::class, 'index'])
         ->name('track.shows.episodes');
 
-    // Per-user "Upcoming" feed (spec §6): future episodes/movies from the shows
-    // and movies this user tracks, derived by query and scoped to the current
-    // user inside the controller.
-    Route::get('upcoming/episodes', [UpcomingController::class, 'episodes'])
-        ->name('upcoming.episodes');
-    Route::get('upcoming/movies', [UpcomingController::class, 'movies'])
-        ->name('upcoming.movies');
+    // "Upcoming" sub-tabs (spec §5, build order item 10): future episodes/movies
+    // from the shows and movies this user tracks, derived by query and scoped to
+    // the current user inside the controller.
+    Route::get('shows/upcoming', [UpcomingController::class, 'episodes'])
+        ->name('shows.upcoming');
+    Route::get('movies/upcoming', [UpcomingController::class, 'movies'])
+        ->name('movies.upcoming');
 });
 
 require __DIR__.'/settings.php';

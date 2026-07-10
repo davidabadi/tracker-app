@@ -10,8 +10,11 @@ import TrackerLayout from '@/layouts/tracker-layout';
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 // The four main nav destinations (spec §5) share the tracker shell: bottom
-// tab bar on mobile, sidebar on desktop.
+// tab bar on mobile, sidebar on desktop. Sub-pages (e.g. shows/upcoming) live
+// in a directory named after their tab and get the same shell.
 const trackerPages = ['shows', 'movies', 'search', 'profile'];
+const isTrackerPage = (name: string) =>
+    trackerPages.some((page) => name === page || name.startsWith(`${page}/`));
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
@@ -23,7 +26,7 @@ createInertiaApp({
                 return AuthLayout;
             case name.startsWith('settings/'):
                 return [AppLayout, SettingsLayout];
-            case trackerPages.includes(name):
+            case isTrackerPage(name):
                 return TrackerLayout;
             default:
                 return AppLayout;
