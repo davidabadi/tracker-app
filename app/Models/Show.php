@@ -18,13 +18,21 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
  * @property string $title
  * @property string|null $poster_image_url
  * @property string|null $overview
+ * @property bool $ended TMDB reports the show as concluded (Ended/Canceled)
  */
 class Show extends Model
 {
     /** @use HasFactory<ShowFactory> */
     use HasFactory;
 
-    protected $fillable = ['title', 'poster_image_url', 'overview'];
+    protected $fillable = ['title', 'poster_image_url', 'overview', 'ended'];
+
+    protected function casts(): array
+    {
+        return [
+            'ended' => 'boolean',
+        ];
+    }
 
     /**
      * @return HasMany<Season, $this>

@@ -9,6 +9,7 @@ use App\Http\Requests\ToggleSeasonWatchedRequest;
 use App\Models\Episode;
 use App\Models\Show;
 use App\Models\UserEpisodeWatch;
+use App\Services\Library\TrackingStatusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -41,7 +42,7 @@ class EpisodeWatchController extends Controller
      * it: watched_date is stamped "now" on watch and cleared on unwatch. Genuine
      * toggle — calling it twice returns to the original state.
      */
-    public function toggle(Request $request, Episode $episode): JsonResponse
+    public function toggle(Request $request, Episode $episode, TrackingStatusService $trackingStatus): JsonResponse
     {
         $this->ensureShowTracked($request, $episode->show_id);
 
@@ -52,7 +53,74 @@ class EpisodeWatchController extends Controller
         $watch->toggleWatched();
         $watch->save();
 
+        // Marking watched can auto-promote the show's status (Watch Later /
+        // Stopped → Watching, everything seen on an ended show → Finished).
+        if ($watch->watched) {
+            $trackingStatus->recordWatchActivity($request->user(), $episode->show);
+        }
+
         return response()->json(['watch' => $this->present($watch)]);
+    }
+
+    /**
+     * Mark one episode AND every episode before it (airing order, specials
+     * excluded) watched for this user in one batch — the "catch me up to here"
+     * action behind the mark-previous prompt. Not a toggle: the target state
+     * is always watched. Auto-tracks and derives status like the single
+     * toggle.
+     */
+    public function watchThrough(Request $request, Episode $episode, TrackingStatusService $trackingStatus): JsonResponse
+    {
+        $this->ensureShowTracked($request, $episode->show_id);
+
+        $episodeIds = Episode::query()
+            ->where('show_id', $episode->show_id)
+            ->where('season_number', '>', 0)
+            ->where(function ($query) use ($episode): void {
+                $query->where('season_number', '<', $episode->season_number)
+                    ->orWhere(function ($query) use ($episode): void {
+                        $query->where('season_number', $episode->season_number)
+                            ->where('episode_number', '<=', $episode->episode_number);
+                    });
+            })
+            ->pluck('id');
+
+        // Leave already-watched episodes untouched so their original
+        // watched_date survives; only the catch-up episodes get stamped now.
+        $alreadyWatched = $request->user()->episodeWatches()
+            ->whereIn('episode_id', $episodeIds)
+            ->where('watched', true)
+            ->pluck('episode_id')
+            ->flip();
+
+        $now = now();
+        $rows = $episodeIds
+            ->reject(fn (int $id): bool => $alreadyWatched->has($id))
+            ->map(fn (int $id): array => [
+                'user_id' => $request->user()->id,
+                'episode_id' => $id,
+                'watched' => true,
+                'watched_date' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ])
+            ->values()
+            ->all();
+
+        if ($rows !== []) {
+            UserEpisodeWatch::upsert($rows, ['user_id', 'episode_id'], ['watched', 'watched_date', 'updated_at']);
+
+            $trackingStatus->recordWatchActivity($request->user(), $episode->show);
+        }
+
+        return response()->json([
+            'show_id' => $episode->show_id,
+            'through' => [
+                'season_number' => $episode->season_number,
+                'episode_number' => $episode->episode_number,
+            ],
+            'episodes_affected' => count($rows),
+        ]);
     }
 
     /**
@@ -60,7 +128,7 @@ class EpisodeWatchController extends Controller
      * single batch upsert (not N queries in a loop). Auto-tracks the show as
      * "watching" first, same as the single toggle.
      */
-    public function toggleSeason(ToggleSeasonWatchedRequest $request, Show $show, int $season): JsonResponse
+    public function toggleSeason(ToggleSeasonWatchedRequest $request, Show $show, int $season, TrackingStatusService $trackingStatus): JsonResponse
     {
         $this->ensureShowTracked($request, $show->id);
 
@@ -81,6 +149,12 @@ class EpisodeWatchController extends Controller
         // on those that do, keyed by the (user_id, episode_id) unique index.
         if ($rows !== []) {
             UserEpisodeWatch::upsert($rows, ['user_id', 'episode_id'], ['watched', 'watched_date', 'updated_at']);
+        }
+
+        // Same status derivation as the single toggle: bulk-watching a season
+        // can promote the show to Watching or complete it into Finished.
+        if ($watched && $rows !== []) {
+            $trackingStatus->recordWatchActivity($request->user(), $show);
         }
 
         return response()->json([

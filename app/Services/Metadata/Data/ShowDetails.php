@@ -16,6 +16,9 @@ namespace App\Services\Metadata\Data;
 final readonly class ShowDetails
 {
     /**
+     * `ended` is true when TMDB reports the show as concluded ("Ended" or
+     * "Canceled") — no further episodes expected unless it is later revived.
+     *
      * @param  list<SeasonDetails>  $seasons
      */
     public function __construct(
@@ -24,6 +27,7 @@ final readonly class ShowDetails
         public ?string $posterPath,
         public ?string $backdropPath,
         public ?string $overview,
+        public bool $ended,
         public array $seasons,
     ) {}
 }

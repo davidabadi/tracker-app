@@ -23,6 +23,15 @@ class ShowFactory extends Factory
             'title' => fake()->sentence(3),
             'poster_image_url' => 'https://image.tmdb.org/t/p/w500/'.fake()->uuid().'.jpg',
             'overview' => fake()->paragraph(),
+            'ended' => false,
         ];
+    }
+
+    /**
+     * A show TMDB reports as concluded — no more episodes expected.
+     */
+    public function ended(): static
+    {
+        return $this->state(['ended' => true]);
     }
 }

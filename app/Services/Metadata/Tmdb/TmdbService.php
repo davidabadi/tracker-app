@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Metadata\Tmdb;
 
+use App\Services\Metadata\Data\CollectionDetails;
 use App\Services\Metadata\Data\EpisodeDetails;
 use App\Services\Metadata\Data\MediaType;
 use App\Services\Metadata\Data\MovieDetails;
@@ -82,6 +83,9 @@ final class TmdbService implements MediaMetadataProvider
             posterPath: $show['poster_path'] ?? null,
             backdropPath: $show['backdrop_path'] ?? null,
             overview: $show['overview'] ?? null,
+            // TMDB's status field: "Returning Series", "In Production",
+            // "Ended", "Canceled", ... — only the last two mean concluded.
+            ended: in_array($show['status'] ?? '', ['Ended', 'Canceled'], true),
             seasons: $seasons,
         );
     }
@@ -97,6 +101,35 @@ final class TmdbService implements MediaMetadataProvider
             overview: $movie['overview'] ?? null,
             releaseDate: $this->nullableString($movie['release_date'] ?? null),
             runtimeMinutes: isset($movie['runtime']) ? (int) $movie['runtime'] : null,
+            collectionId: isset($movie['belongs_to_collection']['id'])
+                ? (int) $movie['belongs_to_collection']['id']
+                : null,
+        );
+    }
+
+    /**
+     * Fetch a TMDB collection ("franchise") and its member movies, ordered by
+     * release date (unknown dates last). TMDB collections hold the direct
+     * entries only, which is exactly the "no spin-offs" semantics the movie
+     * detail's franchise strip wants.
+     */
+    public function fetchMovieCollection(int $collectionId): CollectionDetails
+    {
+        $collection = $this->get("/collection/{$collectionId}");
+
+        $movies = array_map(
+            fn (array $part): SearchResult => $this->toMovieResult($part),
+            $collection['parts'] ?? [],
+        );
+
+        usort($movies, function (SearchResult $a, SearchResult $b): int {
+            return ($a->year ?? PHP_INT_MAX) <=> ($b->year ?? PHP_INT_MAX);
+        });
+
+        return new CollectionDetails(
+            tmdbId: (int) $collection['id'],
+            name: (string) ($collection['name'] ?? ''),
+            movies: $movies,
         );
     }
 

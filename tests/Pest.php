@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /*
@@ -48,39 +49,53 @@ expect()->extend('toBeOne', function () {
  * Fake the TMDB endpoints hit while building a show/movie (id 1399 / 603) so the
  * real TmdbService parsing runs against controlled data — no network involved.
  * Shared by the tracking feature tests.
+ *
+ * $tvStatus is TMDB's show status ("Returning Series", "Ended", "Canceled", ...)
+ * — pass "Ended" to exercise the concluded-show auto-finish rules.
  */
-function fakeTmdb(): void
+function fakeTmdb(string $tvStatus = 'Returning Series'): void
 {
-    \Illuminate\Support\Facades\Http::fake([
-        'api.themoviedb.org/3/tv/1399/season/1*' => \Illuminate\Support\Facades\Http::response([
+    Http::fake([
+        'api.themoviedb.org/3/tv/1399/season/1*' => Http::response([
             'episodes' => [
                 ['season_number' => 1, 'episode_number' => 1, 'name' => 'Ep1', 'still_path' => '/s1e1.jpg', 'overview' => 'o1', 'air_date' => '2020-01-01', 'runtime' => 42],
                 ['season_number' => 1, 'episode_number' => 2, 'name' => 'Ep2', 'still_path' => null, 'overview' => '', 'air_date' => '', 'runtime' => 45],
             ],
         ]),
-        'api.themoviedb.org/3/tv/1399/season/2*' => \Illuminate\Support\Facades\Http::response([
+        'api.themoviedb.org/3/tv/1399/season/2*' => Http::response([
             'episodes' => [
                 ['season_number' => 2, 'episode_number' => 1, 'name' => 'S2E1', 'still_path' => '/s2e1.jpg', 'overview' => 'o', 'air_date' => '2021-01-01', 'runtime' => 50],
             ],
         ]),
-        'api.themoviedb.org/3/tv/1399*' => \Illuminate\Support\Facades\Http::response([
+        'api.themoviedb.org/3/tv/1399*' => Http::response([
             'id' => 1399,
             'name' => 'Test Show',
             'poster_path' => '/poster.jpg',
             'backdrop_path' => '/backdrop.jpg',
             'overview' => 'A show overview',
+            'status' => $tvStatus,
             'seasons' => [
                 ['season_number' => 1],
                 ['season_number' => 2],
             ],
         ]),
-        'api.themoviedb.org/3/movie/603*' => \Illuminate\Support\Facades\Http::response([
+        'api.themoviedb.org/3/movie/603*' => Http::response([
             'id' => 603,
             'title' => 'The Matrix',
             'poster_path' => '/matrix.jpg',
             'overview' => 'A movie overview',
             'release_date' => '1999-03-31',
             'runtime' => 136,
+            'belongs_to_collection' => ['id' => 2344, 'name' => 'The Matrix Collection'],
+        ]),
+        'api.themoviedb.org/3/collection/2344*' => Http::response([
+            'id' => 2344,
+            'name' => 'The Matrix Collection',
+            'parts' => [
+                ['id' => 603, 'title' => 'The Matrix', 'poster_path' => '/matrix.jpg', 'release_date' => '1999-03-31'],
+                ['id' => 604, 'title' => 'The Matrix Reloaded', 'poster_path' => '/reloaded.jpg', 'release_date' => '2003-05-15'],
+                ['id' => 605, 'title' => 'The Matrix Revolutions', 'poster_path' => '/revolutions.jpg', 'release_date' => '2003-11-05'],
+            ],
         ]),
     ]);
 }

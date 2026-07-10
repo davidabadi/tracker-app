@@ -71,6 +71,18 @@ class MovieTrackingController extends Controller
     }
 
     /**
+     * Untrack a movie for this user. The tracking row carries the watched
+     * state, so deleting it also resets watched — untracking means "start
+     * from scratch". Idempotent: untracking an untracked movie is a no-op.
+     */
+    public function destroy(Request $request, Movie $movie): JsonResponse
+    {
+        $request->user()->movieTrackings()->where('movie_id', $movie->id)->delete();
+
+        return response()->json(['tracked' => false]);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function present(UserMovieTracking $tracking): array

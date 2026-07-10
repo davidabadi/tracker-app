@@ -6,9 +6,11 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\TrackShowRequest;
 use App\Http\Requests\UpdateShowStatusRequest;
+use App\Models\Show;
 use App\Models\UserShowTracking;
 use App\Services\Library\MediaLibraryService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
  * Show tracking for the logged-in user (spec §10 item 5): add a show to their
@@ -60,6 +62,24 @@ class ShowTrackingController extends Controller
         $model->update(['status' => $request->status()]);
 
         return response()->json(['tracking' => $this->present($model)]);
+    }
+
+    /**
+     * Untrack a show for this user: the tracking row goes away AND every one
+     * of their episode-watch rows for the show is deleted — untracking means
+     * "start from scratch", not "hide but remember". Keyed by the shared show
+     * id (that's what the UI knows); only the current user's rows are touched.
+     * Idempotent: untracking an untracked show is a no-op.
+     */
+    public function destroy(Request $request, Show $show): JsonResponse
+    {
+        $request->user()->showTrackings()->where('show_id', $show->id)->delete();
+
+        $request->user()->episodeWatches()
+            ->whereIn('episode_id', $show->episodes()->select('id'))
+            ->delete();
+
+        return response()->json(['tracked' => false]);
     }
 
     /**

@@ -83,6 +83,27 @@ it('carries this user\'s watched flag on upcoming episodes', function () {
         );
 });
 
+it('excludes specials (season 0) from the upcoming feed', function () {
+    $user = User::factory()->create();
+    $show = Show::factory()->create();
+    $user->showTrackings()->create(['show_id' => $show->id, 'status' => ShowStatus::Watching]);
+
+    Episode::factory()->create([
+        'show_id' => $show->id, 'season_number' => 0, 'episode_number' => 1, 'air_date' => today()->addWeek(),
+    ]);
+    $regular = Episode::factory()->create([
+        'show_id' => $show->id, 'season_number' => 1, 'episode_number' => 1, 'air_date' => today()->addWeek(),
+    ]);
+
+    $this->actingAs($user)->get(route('shows.upcoming'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $inertia) => $inertia
+            ->component('shows/upcoming')
+            ->has('episodes', 1)
+            ->where('episodes.0.id', $regular->id)
+        );
+});
+
 it('excludes episodes from shows the user does not track', function () {
     $user = User::factory()->create();
     $tracked = Show::factory()->create();

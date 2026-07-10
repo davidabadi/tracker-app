@@ -164,7 +164,10 @@ export default function TrackerLayout({
         <div className="min-h-svh bg-background text-foreground">
             <DesktopSidebar user={auth.user} />
             <div className="md:pl-60">
-                <main className="mx-auto flex min-h-svh w-full max-w-5xl flex-col px-4 pt-6 pb-24 md:px-8 md:py-8">
+                {/* Fixed-height column: headers/tabs render as static children,
+                    and each page scrolls its own list inside PageScrollArea
+                    (which also carries the mobile tab-bar clearance). */}
+                <main className="mx-auto flex h-svh w-full max-w-5xl flex-col overflow-hidden px-4 pt-6 md:px-8 md:pt-8">
                     {children}
                 </main>
             </div>

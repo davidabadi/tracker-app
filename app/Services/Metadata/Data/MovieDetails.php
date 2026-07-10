@@ -13,6 +13,11 @@ namespace App\Services\Metadata\Data;
  */
 final readonly class MovieDetails
 {
+    /**
+     * `collectionId` is the TMDB collection ("franchise") the movie belongs
+     * to — direct entries only (Star Wars Episodes 1–9 share one; spin-offs
+     * do not) — or null for standalone movies.
+     */
     public function __construct(
         public int $tmdbId,
         public string $title,
@@ -20,5 +25,6 @@ final readonly class MovieDetails
         public ?string $overview,
         public ?string $releaseDate,
         public ?int $runtimeMinutes,
+        public ?int $collectionId,
     ) {}
 }

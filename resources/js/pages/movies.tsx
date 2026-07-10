@@ -3,6 +3,7 @@ import { Film } from 'lucide-react';
 import { ComingSoon } from '@/components/coming-soon';
 import Heading from '@/components/heading';
 import { MediaSubTabs } from '@/components/media-sub-tabs';
+import { PageScrollArea } from '@/components/page-scroll-area';
 import { movies } from '@/routes';
 import { upcoming } from '@/routes/movies';
 
@@ -20,11 +21,13 @@ export default function Movies() {
                     { title: 'Upcoming', href: upcoming() },
                 ]}
             />
-            <ComingSoon
-                icon={Film}
-                title="Your movies live here"
-                description="The Watch Next grid arrives with the next build steps — Upcoming releases are live in the tab above."
-            />
+            <PageScrollArea>
+                <ComingSoon
+                    icon={Film}
+                    title="Your movies live here"
+                    description="The Watch Next grid arrives with the next build steps — Upcoming releases are live in the tab above."
+                />
+            </PageScrollArea>
         </>
     );
 }

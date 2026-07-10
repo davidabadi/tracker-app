@@ -38,6 +38,8 @@ class UpcomingController extends Controller
         $episodes = Episode::query()
             ->whereNotNull('air_date')
             ->whereDate('air_date', '>=', today())
+            // Specials (season 0) are not part of a show's tracked run.
+            ->where('season_number', '>', 0)
             ->whereHas('show.trackings', function ($query) use ($user): void {
                 $query->where('user_id', $user->id);
             })

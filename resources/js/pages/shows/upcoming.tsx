@@ -1,9 +1,14 @@
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { CalendarClock, Tv } from 'lucide-react';
+import { useState } from 'react';
+import { Countdown } from '@/components/countdown';
 import { EmptyState } from '@/components/empty-state';
+import { EpisodeQuickViewModal } from '@/components/episode-quick-view-modal';
 import { EpisodeWatchedToggle } from '@/components/episode-watched-toggle';
 import Heading from '@/components/heading';
 import { MediaSubTabs } from '@/components/media-sub-tabs';
+import { PageScrollArea } from '@/components/page-scroll-area';
+import { ShowDetailModal } from '@/components/show-detail-modal';
 import {
     daysBetween,
     formatLongDate,
@@ -55,11 +60,28 @@ function episodeCode(episode: UpcomingEpisode): string {
     return `S${season} | E${number}`;
 }
 
-function EpisodeRow({ episode }: { episode: UpcomingEpisode }) {
+function EpisodeRow({
+    episode,
+    today,
+    onOpenEpisode,
+    onOpenShow,
+}: {
+    episode: UpcomingEpisode;
+    today: string;
+    onOpenEpisode: () => void;
+    onOpenShow: () => void;
+}) {
     const showTitle = episode.show_title ?? 'Unknown show';
+    const daysUntilAiring = daysBetween(
+        parseDateString(today),
+        parseDateString(episode.air_date),
+    );
 
     return (
-        <li className="flex items-stretch overflow-hidden rounded-xl bg-card">
+        <li
+            onClick={onOpenEpisode}
+            className="flex cursor-pointer items-stretch overflow-hidden rounded-xl bg-card transition-colors hover:bg-card/80"
+        >
             {episode.show_poster_url ? (
                 <img
                     src={episode.show_poster_url}
@@ -73,9 +95,17 @@ function EpisodeRow({ episode }: { episode: UpcomingEpisode }) {
             )}
             <div className="flex min-w-0 flex-1 items-center gap-3 p-3.5">
                 <div className="min-w-0 flex-1 space-y-1">
-                    <span className="inline-flex max-w-full items-center rounded-full border border-foreground/25 px-3 py-0.5 text-xs font-semibold tracking-wide uppercase">
+                    {/* The show-name pill opens the show; the card itself the episode. */}
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onOpenShow();
+                        }}
+                        className="inline-flex max-w-full items-center rounded-full border border-foreground/25 px-3 py-0.5 text-xs font-semibold tracking-wide uppercase transition-colors hover:border-foreground/60"
+                    >
                         <span className="truncate">{showTitle}</span>
-                    </span>
+                    </button>
                     <p className="text-base font-semibold">
                         {episodeCode(episode)}
                     </p>
@@ -83,11 +113,20 @@ function EpisodeRow({ episode }: { episode: UpcomingEpisode }) {
                         {episode.title ?? 'TBA'}
                     </p>
                 </div>
-                <EpisodeWatchedToggle
-                    episodeId={episode.id}
-                    initialWatched={episode.watched}
-                    label={`${showTitle} ${episodeCode(episode)}`}
-                />
+                <span onClick={(event) => event.stopPropagation()}>
+                    {daysUntilAiring > 0 ? (
+                        // Not aired yet: nothing to mark watched — count down
+                        // to air day instead, mirroring Movies › Upcoming.
+                        <Countdown daysUntil={daysUntilAiring} />
+                    ) : (
+                        <EpisodeWatchedToggle
+                            key={`${episode.id}-${episode.watched}`}
+                            episodeId={episode.id}
+                            initialWatched={episode.watched}
+                            label={`${showTitle} ${episodeCode(episode)}`}
+                        />
+                    )}
+                </span>
             </div>
         </li>
     );
@@ -100,6 +139,12 @@ export default function ShowsUpcoming({
     episodes: UpcomingEpisode[];
     today: string;
 }) {
+    const [episodeModalId, setEpisodeModalId] = useState<number | null>(null);
+    const [showModal, setShowModal] = useState<{
+        showId: number;
+        title: string;
+    } | null>(null);
+
     // Episodes arrive sorted by air date; fold them into one section per date.
     const sections = new Map<string, UpcomingEpisode[]>();
 
@@ -107,6 +152,15 @@ export default function ShowsUpcoming({
         const group = sections.get(episode.air_date) ?? [];
         group.push(episode);
         sections.set(episode.air_date, group);
+    }
+
+    function handleModalClose(dirty: boolean) {
+        setEpisodeModalId(null);
+        setShowModal(null);
+
+        if (dirty) {
+            router.reload({ only: ['episodes'] });
+        }
     }
 
     return (
@@ -122,32 +176,60 @@ export default function ShowsUpcoming({
                     { title: 'Upcoming', href: upcoming() },
                 ]}
             />
-            {episodes.length === 0 ? (
-                <EmptyState
-                    icon={CalendarClock}
-                    title="Nothing on the calendar"
-                    description="Upcoming episodes from shows you track will appear here as air dates are announced."
+            <PageScrollArea>
+                {episodes.length === 0 ? (
+                    <EmptyState
+                        icon={CalendarClock}
+                        title="Nothing on the calendar"
+                        description="Upcoming episodes from shows you track will appear here as air dates are announced."
+                    />
+                ) : (
+                    <div className="space-y-6">
+                        {[...sections.entries()].map(([airDate, group]) => (
+                            <section key={airDate}>
+                                <div className="flex justify-center">
+                                    <span className="rounded-full bg-muted px-3.5 py-1 text-xs font-semibold tracking-wider uppercase">
+                                        {sectionLabel(airDate, today)}
+                                    </span>
+                                </div>
+                                <ul className="mt-3 space-y-3">
+                                    {group.map((episode) => (
+                                        <EpisodeRow
+                                            key={episode.id}
+                                            episode={episode}
+                                            today={today}
+                                            onOpenEpisode={() =>
+                                                setEpisodeModalId(episode.id)
+                                            }
+                                            onOpenShow={() =>
+                                                setShowModal({
+                                                    showId: episode.show_id,
+                                                    title:
+                                                        episode.show_title ??
+                                                        'Show',
+                                                })
+                                            }
+                                        />
+                                    ))}
+                                </ul>
+                            </section>
+                        ))}
+                    </div>
+                )}
+            </PageScrollArea>
+
+            {episodeModalId !== null && (
+                <EpisodeQuickViewModal
+                    episodeId={episodeModalId}
+                    onClose={handleModalClose}
                 />
-            ) : (
-                <div className="space-y-6">
-                    {[...sections.entries()].map(([airDate, group]) => (
-                        <section key={airDate}>
-                            <div className="flex justify-center">
-                                <span className="rounded-full bg-muted px-3.5 py-1 text-xs font-semibold tracking-wider uppercase">
-                                    {sectionLabel(airDate, today)}
-                                </span>
-                            </div>
-                            <ul className="mt-3 space-y-3">
-                                {group.map((episode) => (
-                                    <EpisodeRow
-                                        key={episode.id}
-                                        episode={episode}
-                                    />
-                                ))}
-                            </ul>
-                        </section>
-                    ))}
-                </div>
+            )}
+            {showModal !== null && (
+                <ShowDetailModal
+                    showId={showModal.showId}
+                    title={showModal.title}
+                    onClose={handleModalClose}
+                />
             )}
         </>
     );

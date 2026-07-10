@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
  * @property string|null $overview
  * @property CarbonImmutable|null $release_date
  * @property int|null $runtime_minutes
+ * @property int|null $tmdb_collection_id TMDB franchise/collection id
  */
 class Movie extends Model
 {
@@ -33,6 +34,7 @@ class Movie extends Model
         'overview',
         'release_date',
         'runtime_minutes',
+        'tmdb_collection_id',
     ];
 
     protected function casts(): array
@@ -40,6 +42,7 @@ class Movie extends Model
         return [
             'release_date' => 'date',
             'runtime_minutes' => 'integer',
+            'tmdb_collection_id' => 'integer',
         ];
     }
 

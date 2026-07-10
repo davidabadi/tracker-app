@@ -34,6 +34,7 @@ final readonly class MediaLibraryService
 
     public function __construct(
         private TmdbService $tmdb,
+        private TrackingStatusService $trackingStatus,
     ) {}
 
     /**
@@ -73,6 +74,10 @@ final readonly class MediaLibraryService
         $details = $this->tmdb->fetchShowDetails($tmdbId);
 
         DB::transaction(function () use ($show, $details): void {
+            // Keep the concluded flag fresh: an ended show can be revived with
+            // new seasons, and a running one can get canceled.
+            $show->update(['ended' => $details->ended]);
+
             foreach ($details->seasons as $season) {
                 $show->seasons()->updateOrCreate(
                     ['season_number' => $season->seasonNumber],
@@ -96,6 +101,11 @@ final readonly class MediaLibraryService
                 }
             }
         });
+
+        // With metadata reconciled, derive statuses: anyone still "watching" a
+        // now-concluded show they have fully seen becomes "finished". Covers
+        // the finale being watched before TMDB flagged the show as Ended.
+        $this->trackingStatus->finishCompletedTrackings($show->refresh());
     }
 
     /**
@@ -124,6 +134,8 @@ final readonly class MediaLibraryService
         $movie->update([
             'release_date' => $details->releaseDate ?? $movie->release_date,
             'runtime_minutes' => $runtime,
+            // 0 = confirmed collection-less (null means "never checked").
+            'tmdb_collection_id' => $details->collectionId ?? 0,
         ]);
     }
 
@@ -148,6 +160,8 @@ final readonly class MediaLibraryService
                 'overview' => $details->overview,
                 'release_date' => $details->releaseDate,
                 'runtime_minutes' => $details->runtimeMinutes,
+                // 0 = confirmed collection-less (null means "never checked").
+                'tmdb_collection_id' => $details->collectionId ?? 0,
             ]);
 
             $this->linkExternalId(MediaType::Movie, $movie->id, $details->tmdbId);
@@ -162,6 +176,7 @@ final readonly class MediaLibraryService
             'title' => $details->title,
             'poster_image_url' => $this->tmdb->imageUrl($details->posterPath),
             'overview' => $details->overview,
+            'ended' => $details->ended,
         ]);
 
         foreach ($details->seasons as $season) {

@@ -3,6 +3,7 @@ import { Tv } from 'lucide-react';
 import { ComingSoon } from '@/components/coming-soon';
 import Heading from '@/components/heading';
 import { MediaSubTabs } from '@/components/media-sub-tabs';
+import { PageScrollArea } from '@/components/page-scroll-area';
 import { shows } from '@/routes';
 import { upcoming } from '@/routes/shows';
 
@@ -20,11 +21,13 @@ export default function Shows() {
                     { title: 'Upcoming', href: upcoming() },
                 ]}
             />
-            <ComingSoon
-                icon={Tv}
-                title="Your watch list lives here"
-                description="Watch Next and Watched History arrive with the next build steps — Upcoming is live in the tab above."
-            />
+            <PageScrollArea>
+                <ComingSoon
+                    icon={Tv}
+                    title="Your watch list lives here"
+                    description="Watch Next and Watched History arrive with the next build steps — Upcoming is live in the tab above."
+                />
+            </PageScrollArea>
         </>
     );
 }

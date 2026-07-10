@@ -1,7 +1,11 @@
 <?php
 
+use App\Http\Controllers\EpisodeController;
 use App\Http\Controllers\EpisodeWatchController;
+use App\Http\Controllers\MovieController;
 use App\Http\Controllers\MovieTrackingController;
+use App\Http\Controllers\SearchController;
+use App\Http\Controllers\ShowController;
 use App\Http\Controllers\ShowTrackingController;
 use App\Http\Controllers\UpcomingController;
 use Illuminate\Support\Facades\DB;
@@ -71,8 +75,27 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Main navigation shell (spec §5): Shows | Movies | Search | Profile.
     Route::inertia('shows', 'shows')->name('shows');
     Route::inertia('movies', 'movies')->name('movies');
-    Route::inertia('search', 'search')->name('search');
+    Route::get('search', [SearchController::class, 'index'])->name('search');
     Route::inertia('profile', 'profile')->name('profile');
+
+    // Opening a search result (spec §5 Search): resolve a TMDB id to our own
+    // Show/Movie row — creating it on first sight, idempotently — then redirect
+    // into the JSON detail endpoint below (the modal's XHR follows it).
+    Route::get('search/shows/{tmdbId}', [SearchController::class, 'openShow'])
+        ->whereNumber('tmdbId')->name('search.shows.open');
+    Route::get('search/movies/{tmdbId}', [SearchController::class, 'openMovie'])
+        ->whereNumber('tmdbId')->name('search.movies.open');
+
+    // Show/Movie detail payloads (spec §5, build item 11): JSON consumed by the
+    // client-side detail modals. whereNumber keeps these from swallowing the
+    // literal sibling paths (shows/upcoming etc.).
+    Route::get('shows/{show}', [ShowController::class, 'show'])
+        ->whereNumber('show')->name('shows.show');
+    Route::get('movies/{movie}', [MovieController::class, 'show'])
+        ->whereNumber('movie')->name('movies.show');
+    // Episode Quick View payload (JSON), with previous/next ids for browsing.
+    Route::get('episodes/{episode}', [EpisodeController::class, 'show'])
+        ->whereNumber('episode')->name('episodes.show');
 
     // The starter kit's dashboard is superseded by the tab shell. The route
     // name sticks around because Fortify sends users here after login.
@@ -85,9 +108,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('track.shows.store');
     Route::patch('track/shows/{tracking}', [ShowTrackingController::class, 'update'])
         ->name('track.shows.update');
+    // Untrack: removes this user's tracking row AND resets all their episode
+    // watches for the show — keyed by the shared show id the UI knows.
+    Route::delete('track/shows/{show}', [ShowTrackingController::class, 'destroy'])
+        ->name('track.shows.destroy');
 
     Route::post('track/movies', [MovieTrackingController::class, 'store'])
         ->name('track.movies.store');
+    Route::delete('track/movies/{movie}', [MovieTrackingController::class, 'destroy'])
+        ->name('track.movies.destroy');
     // Keyed by the shared movie id: auto-creates this user's tracking row if the
     // movie isn't tracked yet, then toggles watched (spec item 6 correction).
     Route::patch('track/movies/{movie}/watched', [MovieTrackingController::class, 'toggleWatched'])
@@ -98,6 +127,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // user inside the controller, which also auto-tracks the show as "watching".
     Route::patch('track/episodes/{episode}/watched', [EpisodeWatchController::class, 'toggle'])
         ->name('track.episodes.watched');
+    // "Catch me up": mark this episode and every earlier one watched.
+    Route::patch('track/episodes/{episode}/watch-through', [EpisodeWatchController::class, 'watchThrough'])
+        ->name('track.episodes.watchThrough');
     Route::patch('track/shows/{show}/seasons/{season}/watched', [EpisodeWatchController::class, 'toggleSeason'])
         ->name('track.shows.seasons.watched');
     Route::get('track/shows/{show}/episodes', [EpisodeWatchController::class, 'index'])
