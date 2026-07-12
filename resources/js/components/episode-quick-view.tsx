@@ -49,6 +49,7 @@ export function EpisodeQuickView({
     episode,
     showTitle,
     watched,
+    watchCount = 0,
     watchedDate,
     toggle,
     hasPrevious,
@@ -62,6 +63,7 @@ export function EpisodeQuickView({
     episode: QuickViewEpisode | null;
     showTitle?: string | null;
     watched: boolean;
+    watchCount?: number;
     watchedDate: string | null;
     toggle: React.ReactNode;
     hasPrevious: boolean;
@@ -166,7 +168,7 @@ export function EpisodeQuickView({
                         // episode, sliding in from the direction of travel.
                         key={episode.id}
                         className={cn(
-                            'grid gap-4 duration-300 animate-in fade-in',
+                            'grid animate-in gap-4 duration-300 fade-in',
                             lastDirection === 'next'
                                 ? 'slide-in-from-right-8'
                                 : 'slide-in-from-left-8',
@@ -214,7 +216,7 @@ export function EpisodeQuickView({
                             <div className="flex items-center gap-2.5">
                                 <span>
                                     {watched
-                                        ? `Watched ${
+                                        ? `${`Watched ${
                                               watchedDate
                                                   ? formatLongDate(
                                                         parseDateString(
@@ -222,7 +224,7 @@ export function EpisodeQuickView({
                                                         ),
                                                     )
                                                   : ''
-                                          }`.trim()
+                                          }`.trim()}${watchCount > 1 ? ` · ${watchCount}×` : ''}`
                                         : 'Not watched'}
                                 </span>
                                 {toggle}

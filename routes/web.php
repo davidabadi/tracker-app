@@ -8,6 +8,7 @@ use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ShowController;
 use App\Http\Controllers\ShowTrackingController;
 use App\Http\Controllers\UpcomingController;
+use App\Http\Controllers\WatchListController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -72,11 +73,18 @@ Route::get('/health', function () {
 })->name('health');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    // Main navigation shell (spec §5): Shows | Movies | Search | Profile.
-    Route::inertia('shows', 'shows')->name('shows');
-    Route::inertia('movies', 'movies')->name('movies');
+    // Main navigation shell (spec §5): Shows | Movies | Search | Profile. The
+    // Shows/Movies tabs land on their Watch List sub-tab (spec §5, item 9).
+    Route::get('shows', [WatchListController::class, 'shows'])->name('shows');
+    Route::get('movies', [WatchListController::class, 'movies'])->name('movies');
     Route::get('search', [SearchController::class, 'index'])->name('search');
     Route::inertia('profile', 'profile')->name('profile');
+
+    // Watched History (spec Part 2 §3): cursor-paginated JSON, fetched on demand
+    // as the user scrolls up on the Shows watch list — never part of that page's
+    // initial payload. Literal path, so the numeric {show} route can't swallow it.
+    Route::get('shows/watched-history', [WatchListController::class, 'history'])
+        ->name('shows.watched-history');
 
     // Opening a search result (spec §5 Search): resolve a TMDB id to our own
     // Show/Movie row — creating it on first sight, idempotently — then redirect
@@ -107,11 +115,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('track/shows', [ShowTrackingController::class, 'store'])
         ->name('track.shows.store');
     Route::patch('track/shows/{tracking}', [ShowTrackingController::class, 'update'])
-        ->name('track.shows.update');
+        ->whereNumber('tracking')->name('track.shows.update');
+    // Left-swipe status move (Watch Later / Stop Watching), keyed by shared show id.
+    Route::patch('track/shows/{show}/status', [ShowTrackingController::class, 'setStatus'])
+        ->whereNumber('show')->name('track.shows.status');
+    // Left-swipe "Remove": drops the tracking row only, PRESERVING episode
+    // watches (unlike destroy below, which wipes them).
+    Route::delete('track/shows/{show}/tracking', [ShowTrackingController::class, 'removeFromList'])
+        ->whereNumber('show')->name('track.shows.remove');
     // Untrack: removes this user's tracking row AND resets all their episode
     // watches for the show — keyed by the shared show id the UI knows.
     Route::delete('track/shows/{show}', [ShowTrackingController::class, 'destroy'])
-        ->name('track.shows.destroy');
+        ->whereNumber('show')->name('track.shows.destroy');
 
     Route::post('track/movies', [MovieTrackingController::class, 'store'])
         ->name('track.movies.store');
@@ -140,6 +155,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // the current user inside the controller.
     Route::get('shows/upcoming', [UpcomingController::class, 'episodes'])
         ->name('shows.upcoming');
+    // Aired-but-unwatched backlog above the future feed (cursor-paginated JSON,
+    // fetched on demand as the user scrolls up). Literal path, so the numeric
+    // {show} route can't swallow it.
+    Route::get('shows/upcoming/backlog', [UpcomingController::class, 'episodeBacklog'])
+        ->name('shows.upcoming.backlog');
     Route::get('movies/upcoming', [UpcomingController::class, 'movies'])
         ->name('movies.upcoming');
 });

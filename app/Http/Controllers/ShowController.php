@@ -92,6 +92,7 @@ class ShowController extends Controller
             'air_date' => $episode->air_date?->toDateString(),
             'runtime_minutes' => $episode->runtime_minutes,
             'watched' => (bool) $watch?->watched,
+            'watch_count' => (int) ($watch?->watch_count ?? 0),
             'watched_date' => $watch?->watched_date?->toDateString(),
         ];
     }

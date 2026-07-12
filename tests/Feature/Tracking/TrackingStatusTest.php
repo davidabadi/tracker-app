@@ -54,12 +54,12 @@ it('does not promote on unwatching an episode', function () {
     $user = User::factory()->create();
     [$show, $episodes] = makeShowWithOneSeason();
 
-    // Watch (auto-tracks as watching), move to stopped, then unwatch.
+    // Watch (auto-tracks as watching), move to stopped, then unwatch (reset).
     $this->actingAs($user)->patchJson(route('track.episodes.watched', $episodes->first()))->assertOk();
     $user->showTrackings()->sole()->update(['status' => ShowStatus::Stopped]);
 
     $this->actingAs($user)
-        ->patchJson(route('track.episodes.watched', $episodes->first()))
+        ->patchJson(route('track.episodes.watched', $episodes->first()), ['action' => 'reset'])
         ->assertOk()
         ->assertJsonPath('watch.watched', false);
 

@@ -54,6 +54,7 @@ class EpisodeController extends Controller
                 'title' => $episode->show?->title,
             ],
             'watched' => (bool) $watch?->watched,
+            'watchCount' => (int) ($watch?->watch_count ?? 0),
             'watchedDate' => $watch?->watched_date?->toDateString(),
             'previousId' => $previousId,
             'nextId' => $nextId,

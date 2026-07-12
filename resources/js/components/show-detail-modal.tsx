@@ -12,12 +12,9 @@ import {
 } from '@/actions/App/Http/Controllers/ShowTrackingController';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { DetailModal, DetailModalSkeleton } from '@/components/detail-modal';
-import {
-    EpisodeQuickView,
-    episodeCode
-    
-} from '@/components/episode-quick-view';
-import type {QuickViewEpisode} from '@/components/episode-quick-view';
+import { EpisodeQuickView, episodeCode } from '@/components/episode-quick-view';
+import type { QuickViewEpisode } from '@/components/episode-quick-view';
+import { MediaWatchControl } from '@/components/media-watch-control';
 import { Button } from '@/components/ui/button';
 import {
     Collapsible,
@@ -33,12 +30,15 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { WatchedCircle } from '@/components/watched-circle';
+import { nextWatchCount } from '@/components/watched-toggle';
+import type { WatchAction } from '@/components/watched-toggle';
 import { cn } from '@/lib/utils';
 import { open as openShow } from '@/routes/search/shows';
 import { show as showDetail } from '@/routes/shows';
 
 type EpisodeItem = QuickViewEpisode & {
     watched: boolean;
+    watch_count: number;
     watched_date: string | null;
 };
 
@@ -61,7 +61,7 @@ type ShowDetailPayload = {
 };
 
 type WatchState = {
-    watched: boolean;
+    count: number;
     date: string | null;
 };
 
@@ -74,49 +74,27 @@ function localToday(): string {
 }
 
 /**
- * Watched circle wired to the single-episode toggle endpoint, with the state
- * lifted to the modal so season counters and the quick view stay in sync.
- * Turning an episode ON first offers the modal a chance to intercept (the
- * mark-previous prompt); optimistic with rollback otherwise.
+ * Multi-watch control wired to the single-episode action endpoint, with the
+ * count lifted to the modal so season counters and the quick view stay in sync.
+ * Every action funnels through the modal's `onAction`, which can intercept a
+ * first watch (the mark-previous catch-up prompt) before it applies.
  */
 function EpisodeToggle({
     episode,
-    watched,
-    onSet,
-    onInterceptWatch,
+    count,
+    onAction,
     className,
 }: {
     episode: EpisodeItem;
-    watched: boolean;
-    onSet: (episodeId: number, watched: boolean) => void;
-    onInterceptWatch: (episode: EpisodeItem) => boolean;
+    count: number;
+    onAction: (episode: EpisodeItem, action: WatchAction) => void;
     className?: string;
 }) {
-    const { patch, processing } = useHttp({});
-
-    function handleToggle() {
-        if (processing) {
-            return;
-        }
-
-        const next = !watched;
-
-        if (next && onInterceptWatch(episode)) {
-            return;
-        }
-
-        onSet(episode.id, next);
-
-        patch(toggleEpisodeWatched.url(episode.id), {
-            onError: () => onSet(episode.id, !next),
-        });
-    }
-
     return (
-        <WatchedCircle
-            watched={watched}
-            onToggle={handleToggle}
+        <MediaWatchControl
+            count={count}
             label={episodeCode(episode)}
+            onAction={(action) => onAction(episode, action)}
             className={className}
         />
     );
@@ -164,8 +142,7 @@ function SeasonCard({
     onSetSeason,
     onRestore,
     onOpenEpisode,
-    onSetEpisode,
-    onInterceptWatch,
+    onEpisodeAction,
 }: {
     showId: number;
     season: SeasonItem;
@@ -173,14 +150,13 @@ function SeasonCard({
     onSetSeason: (seasonNumber: number, watched: boolean) => void;
     onRestore: (entries: Array<[number, WatchState]>) => void;
     onOpenEpisode: (episode: EpisodeItem) => void;
-    onSetEpisode: (episodeId: number, watched: boolean) => void;
-    onInterceptWatch: (episode: EpisodeItem) => boolean;
+    onEpisodeAction: (episode: EpisodeItem, action: WatchAction) => void;
 }) {
     const { patch, transform, processing } = useHttp({ watched: false });
 
     const total = season.episodes.length;
     const watchedCount = season.episodes.filter(
-        (episode) => watchState[episode.id]?.watched,
+        (episode) => (watchState[episode.id]?.count ?? 0) > 0,
     ).length;
     const allWatched = total > 0 && watchedCount === total;
 
@@ -193,7 +169,7 @@ function SeasonCard({
         const snapshot = season.episodes.map(
             (episode): [number, WatchState] => [
                 episode.id,
-                watchState[episode.id] ?? { watched: false, date: null },
+                watchState[episode.id] ?? { count: 0, date: null },
             ],
         );
 
@@ -260,12 +236,8 @@ function SeasonCard({
                                 </button>
                                 <EpisodeToggle
                                     episode={episode}
-                                    watched={
-                                        watchState[episode.id]?.watched ??
-                                        false
-                                    }
-                                    onSet={onSetEpisode}
-                                    onInterceptWatch={onInterceptWatch}
+                                    count={watchState[episode.id]?.count ?? 0}
+                                    onAction={onEpisodeAction}
                                 />
                             </li>
                         ))}
@@ -314,14 +286,13 @@ export function ShowDetailModal({
 
     const trackHttp = useHttp({ tmdb_id: null as number | null });
     const untrackHttp = useHttp({});
-    const promptToggleHttp = useHttp({});
+    const episodeActionHttp = useHttp({ action: 'increment' as WatchAction });
+    const promptToggleHttp = useHttp({ action: 'increment' as WatchAction });
     const watchThroughHttp = useHttp({});
 
     useEffect(() => {
         const url =
-            tmdbId != null
-                ? openShow.url(tmdbId)
-                : showDetail.url(showId ?? 0);
+            tmdbId != null ? openShow.url(tmdbId) : showDetail.url(showId ?? 0);
 
         get(url, {
             onSuccess: (response) => {
@@ -335,7 +306,7 @@ export function ShowDetailModal({
                             season.episodes.map((episode) => [
                                 episode.id,
                                 {
-                                    watched: episode.watched,
+                                    count: episode.watch_count,
                                     date: episode.watched_date,
                                 },
                             ]),
@@ -360,7 +331,7 @@ export function ShowDetailModal({
     // episodes are ticked off.
     const nextUnwatched =
         episodesInOrder.find(
-            (episode) => !(watchState[episode.id]?.watched ?? false),
+            (episode) => (watchState[episode.id]?.count ?? 0) === 0,
         ) ?? null;
 
     function markDirty() {
@@ -369,12 +340,18 @@ export function ShowDetailModal({
         router.flushAll();
     }
 
-    function setEpisode(episodeId: number, watched: boolean) {
+    function setEpisodeCount(episodeId: number, count: number) {
         markDirty();
         setTracked(true);
         setWatchState((previous) => ({
             ...previous,
-            [episodeId]: { watched, date: watched ? localToday() : null },
+            [episodeId]: {
+                count,
+                date:
+                    count > 0
+                        ? (previous[episodeId]?.date ?? localToday())
+                        : null,
+            },
         }));
     }
 
@@ -392,10 +369,24 @@ export function ShowDetailModal({
         setWatchState((previous) => ({
             ...previous,
             ...Object.fromEntries(
-                season.episodes.map((episode) => [
-                    episode.id,
-                    { watched, date: watched ? localToday() : null },
-                ]),
+                season.episodes.map((episode) => {
+                    // Marking watched keeps any existing rewatch count (matching
+                    // the backend), so a bulk toggle never wipes a "×3".
+                    const existing = previous[episode.id]?.count ?? 0;
+                    const count = watched ? Math.max(existing, 1) : 0;
+
+                    return [
+                        episode.id,
+                        {
+                            count,
+                            date:
+                                count > 0
+                                    ? (previous[episode.id]?.date ??
+                                      localToday())
+                                    : null,
+                        },
+                    ];
+                }),
             ),
         }));
     }
@@ -408,8 +399,38 @@ export function ShowDetailModal({
     }
 
     /**
+     * The single funnel every episode toggle/sheet action flows through. A first
+     * watch (0 → 1) on an episode with earlier unwatched ones opens the catch-up
+     * prompt instead of applying straight away; everything else applies
+     * optimistically against the item-6 action endpoint, rolling back on failure.
+     */
+    function applyEpisodeAction(episode: EpisodeItem, action: WatchAction) {
+        if (episodeActionHttp.processing) {
+            return;
+        }
+
+        const current = watchState[episode.id]?.count ?? 0;
+
+        if (
+            action === 'increment' &&
+            current === 0 &&
+            interceptWatch(episode)
+        ) {
+            return;
+        }
+
+        const snapshot = watchState[episode.id] ?? { count: 0, date: null };
+        setEpisodeCount(episode.id, nextWatchCount(current, action));
+
+        episodeActionHttp.transform(() => ({ action }));
+        episodeActionHttp.patch(toggleEpisodeWatched.url(episode.id), {
+            onError: () => restore([[episode.id, snapshot]]),
+        });
+    }
+
+    /**
      * Marking an episode watched while earlier ones are still unwatched opens
-     * the catch-up prompt instead of toggling straight away.
+     * the catch-up prompt instead of applying straight away.
      */
     function interceptWatch(episode: EpisodeItem): boolean {
         const index = episodesInOrder.findIndex(
@@ -417,7 +438,7 @@ export function ShowDetailModal({
         );
         const hasPreviousUnwatched = episodesInOrder
             .slice(0, index)
-            .some((item) => !(watchState[item.id]?.watched ?? false));
+            .some((item) => (watchState[item.id]?.count ?? 0) === 0);
 
         if (hasPreviousUnwatched) {
             setPendingWatch(episode);
@@ -436,10 +457,11 @@ export function ShowDetailModal({
         }
 
         setPendingWatch(null);
-        setEpisode(episode.id, true);
+        setEpisodeCount(episode.id, 1);
 
+        promptToggleHttp.transform(() => ({ action: 'increment' }));
         promptToggleHttp.patch(toggleEpisodeWatched.url(episode.id), {
-            onError: () => setEpisode(episode.id, false),
+            onError: () => setEpisodeCount(episode.id, 0),
         });
     }
 
@@ -456,7 +478,7 @@ export function ShowDetailModal({
         const through = episodesInOrder.slice(0, index + 1);
         const snapshot = through.map((item): [number, WatchState] => [
             item.id,
-            watchState[item.id] ?? { watched: false, date: null },
+            watchState[item.id] ?? { count: 0, date: null },
         ]);
 
         setPendingWatch(null);
@@ -467,7 +489,10 @@ export function ShowDetailModal({
             ...Object.fromEntries(
                 through.map((item) => [
                     item.id,
-                    { watched: true, date: localToday() },
+                    {
+                        count: Math.max(previous[item.id]?.count ?? 0, 1),
+                        date: previous[item.id]?.date ?? localToday(),
+                    },
                 ]),
             ),
         }));
@@ -513,7 +538,7 @@ export function ShowDetailModal({
             Object.fromEntries(
                 episodesInOrder.map((episode) => [
                     episode.id,
-                    { watched: false, date: null },
+                    { count: 0, date: null },
                 ]),
             ),
         );
@@ -552,8 +577,8 @@ export function ShowDetailModal({
         ? episodesInOrder.findIndex((item) => item.id === quickViewEpisode.id)
         : -1;
     const quickViewWatch = quickViewEpisode
-        ? (watchState[quickViewEpisode.id] ?? { watched: false, date: null })
-        : { watched: false, date: null };
+        ? (watchState[quickViewEpisode.id] ?? { count: 0, date: null })
+        : { count: 0, date: null };
 
     const innerDialogOpen =
         quickViewEpisode !== null || pendingWatch !== null || confirmingUntrack;
@@ -606,9 +631,7 @@ export function ShowDetailModal({
                                         onClick={
                                             tracked
                                                 ? () =>
-                                                      setConfirmingUntrack(
-                                                          true,
-                                                      )
+                                                      setConfirmingUntrack(true)
                                                 : handleTrack
                                         }
                                         aria-label={
@@ -638,23 +661,21 @@ export function ShowDetailModal({
 
                         <div className="px-4 pt-5 md:px-6">
                             <nav className="mb-6 grid grid-cols-2 border-b border-border/60">
-                                {(['about', 'episodes'] as const).map(
-                                    (tab) => (
-                                        <button
-                                            key={tab}
-                                            type="button"
-                                            onClick={() => setActiveTab(tab)}
-                                            className={cn(
-                                                '-mb-px border-b-2 pt-1 pb-2.5 text-center text-sm font-semibold tracking-widest uppercase transition-colors',
-                                                activeTab === tab
-                                                    ? 'border-foreground text-foreground'
-                                                    : 'border-transparent text-muted-foreground hover:text-foreground',
-                                            )}
-                                        >
-                                            {tab}
-                                        </button>
-                                    ),
-                                )}
+                                {(['about', 'episodes'] as const).map((tab) => (
+                                    <button
+                                        key={tab}
+                                        type="button"
+                                        onClick={() => setActiveTab(tab)}
+                                        className={cn(
+                                            '-mb-px border-b-2 pt-1 pb-2.5 text-center text-sm font-semibold tracking-widest uppercase transition-colors',
+                                            activeTab === tab
+                                                ? 'border-foreground text-foreground'
+                                                : 'border-transparent text-muted-foreground hover:text-foreground',
+                                        )}
+                                    >
+                                        {tab}
+                                    </button>
+                                ))}
                             </nav>
 
                             {activeTab === 'about' ? (
@@ -698,15 +719,13 @@ export function ShowDetailModal({
                                                 <div className="flex items-center pr-3.5 pl-1">
                                                     <EpisodeToggle
                                                         episode={nextUnwatched}
-                                                        watched={
+                                                        count={
                                                             watchState[
-                                                                nextUnwatched
-                                                                    .id
-                                                            ]?.watched ?? false
+                                                                nextUnwatched.id
+                                                            ]?.count ?? 0
                                                         }
-                                                        onSet={setEpisode}
-                                                        onInterceptWatch={
-                                                            interceptWatch
+                                                        onAction={
+                                                            applyEpisodeAction
                                                         }
                                                     />
                                                 </div>
@@ -737,11 +756,8 @@ export function ShowDetailModal({
                                                         onOpenEpisode={
                                                             setQuickViewEpisode
                                                         }
-                                                        onSetEpisode={
-                                                            setEpisode
-                                                        }
-                                                        onInterceptWatch={
-                                                            interceptWatch
+                                                        onEpisodeAction={
+                                                            applyEpisodeAction
                                                         }
                                                     />
                                                 ))}
@@ -780,8 +796,8 @@ export function ShowDetailModal({
                                 Catch up to {episodeCode(pendingWatch)}?
                             </DialogTitle>
                             <DialogDescription>
-                                There are earlier episodes you haven't marked
-                                as watched yet. Mark them too?
+                                There are earlier episodes you haven't marked as
+                                watched yet. Mark them too?
                             </DialogDescription>
                         </DialogHeader>
                         <DialogFooter>
@@ -805,15 +821,15 @@ export function ShowDetailModal({
                 }}
                 episode={quickViewEpisode}
                 showTitle={data?.show.title}
-                watched={quickViewWatch.watched}
+                watched={quickViewWatch.count > 0}
+                watchCount={quickViewWatch.count}
                 watchedDate={quickViewWatch.date}
                 toggle={
                     quickViewEpisode && (
                         <EpisodeToggle
                             episode={quickViewEpisode}
-                            watched={quickViewWatch.watched}
-                            onSet={setEpisode}
-                            onInterceptWatch={interceptWatch}
+                            count={quickViewWatch.count}
+                            onAction={applyEpisodeAction}
                         />
                     )
                 }

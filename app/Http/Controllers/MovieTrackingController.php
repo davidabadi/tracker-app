@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Http\Requests\TrackMovieRequest;
+use App\Http\Requests\WatchActionRequest;
 use App\Models\Movie;
 use App\Models\UserMovieTracking;
 use App\Services\Library\MediaLibraryService;
@@ -49,22 +50,23 @@ class MovieTrackingController extends Controller
     }
 
     /**
-     * Toggle a movie watched/unwatched for this user. watched_date is
-     * auto-stamped on watch and cleared on unwatch (spec §4/§9).
+     * Apply a multi-watch action to a movie for this user: increment (mark
+     * watched / rewatch), set_once (collapse to one watch), or reset (mark not
+     * watched). watched_date tracks the most recent watch (spec §4/§9).
      *
      * Keyed by the shared Movie, not by a tracking-row id: per the item 6 design
      * correction, marking an *untracked* movie watched must just work — so the
-     * user's tracking row is find-or-created first, then toggled. (Movies have no
+     * user's tracking row is find-or-created first, then updated. (Movies have no
      * status field, so there's nothing to default the way shows default to
      * "watching".)
      */
-    public function toggleWatched(Request $request, Movie $movie): JsonResponse
+    public function toggleWatched(WatchActionRequest $request, Movie $movie): JsonResponse
     {
         $tracking = $request->user()->movieTrackings()->firstOrCreate(
             ['movie_id' => $movie->id],
         );
 
-        $tracking->toggleWatched();
+        $tracking->applyWatchAction($request->action());
         $tracking->save();
 
         return response()->json(['tracking' => $this->present($tracking)]);
@@ -92,6 +94,7 @@ class MovieTrackingController extends Controller
             'user_id' => $tracking->user_id,
             'movie_id' => $tracking->movie_id,
             'watched' => $tracking->watched,
+            'watch_count' => $tracking->watch_count,
             'watched_date' => $tracking->watched_date?->toIso8601String(),
         ];
     }

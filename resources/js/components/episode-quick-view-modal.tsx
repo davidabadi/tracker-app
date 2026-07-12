@@ -1,19 +1,18 @@
 import { router, useHttp } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import { toggle as toggleEpisodeWatched } from '@/actions/App/Http/Controllers/EpisodeWatchController';
-import {
-    EpisodeQuickView,
-    episodeCode
-    
-} from '@/components/episode-quick-view';
-import type {QuickViewEpisode} from '@/components/episode-quick-view';
-import { WatchedCircle } from '@/components/watched-circle';
+import { EpisodeQuickView, episodeCode } from '@/components/episode-quick-view';
+import type { QuickViewEpisode } from '@/components/episode-quick-view';
+import { MediaWatchControl } from '@/components/media-watch-control';
+import { nextWatchCount } from '@/components/watched-toggle';
+import type { WatchAction } from '@/components/watched-toggle';
 import { show as episodeShow } from '@/routes/episodes';
 
 type EpisodeQuickViewPayload = {
     episode: QuickViewEpisode;
     show: { id: number; title: string | null };
     watched: boolean;
+    watchCount: number;
     watchedDate: string | null;
     previousId: number | null;
     nextId: number | null;
@@ -44,7 +43,7 @@ export function EpisodeQuickViewModal({
 }) {
     const [currentId, setCurrentId] = useState(episodeId);
     const [data, setData] = useState<EpisodeQuickViewPayload | null>(null);
-    const [watched, setWatched] = useState(false);
+    const [watchCount, setWatchCount] = useState(0);
     const [watchedDate, setWatchedDate] = useState<string | null>(null);
     // Kept across navigations (unlike `data`, which clears while the next
     // episode loads) so the position dots stay mounted and animate the move.
@@ -56,7 +55,7 @@ export function EpisodeQuickViewModal({
     const dirty = useRef(false);
 
     const { get } = useHttp({});
-    const toggleHttp = useHttp({});
+    const toggleHttp = useHttp({ action: 'increment' as WatchAction });
 
     useEffect(() => {
         get(episodeShow.url(currentId), {
@@ -64,7 +63,7 @@ export function EpisodeQuickViewModal({
                 const payload = response as EpisodeQuickViewPayload;
 
                 setData(payload);
-                setWatched(payload.watched);
+                setWatchCount(payload.watchCount);
                 setWatchedDate(payload.watchedDate);
                 setDots({
                     position: payload.position,
@@ -78,22 +77,24 @@ export function EpisodeQuickViewModal({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentId]);
 
-    function handleToggle() {
+    function handleWatchAction(action: WatchAction) {
         if (toggleHttp.processing || !data) {
             return;
         }
 
-        const next = !watched;
+        const previousCount = watchCount;
         const previousDate = watchedDate;
+        const next = nextWatchCount(watchCount, action);
 
         dirty.current = true;
-        setWatched(next);
-        setWatchedDate(next ? localToday() : null);
+        setWatchCount(next);
+        setWatchedDate(next > 0 ? (watchedDate ?? localToday()) : null);
         router.flushAll();
 
+        toggleHttp.transform(() => ({ action }));
         toggleHttp.patch(toggleEpisodeWatched.url(currentId), {
             onError: () => {
-                setWatched(!next);
+                setWatchCount(previousCount);
                 setWatchedDate(previousDate);
             },
         });
@@ -120,13 +121,15 @@ export function EpisodeQuickViewModal({
             }}
             episode={data?.episode ?? null}
             showTitle={data?.show.title}
-            watched={watched}
+            watched={watchCount > 0}
+            watchCount={watchCount}
             watchedDate={watchedDate}
             toggle={
-                <WatchedCircle
-                    watched={watched}
-                    onToggle={handleToggle}
+                <MediaWatchControl
+                    count={watchCount}
                     label={data ? episodeCode(data.episode) : 'episode'}
+                    onAction={handleWatchAction}
+                    disabled={toggleHttp.processing}
                 />
             }
             hasPrevious={data?.previousId != null}

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\SetShowStatusRequest;
 use App\Http\Requests\TrackShowRequest;
 use App\Http\Requests\UpdateShowStatusRequest;
 use App\Models\Show;
@@ -62,6 +63,38 @@ class ShowTrackingController extends Controller
         $model->update(['status' => $request->status()]);
 
         return response()->json(['tracking' => $this->present($model)]);
+    }
+
+    /**
+     * Left-swipe status move keyed by the shared show id (spec Part 2 §2):
+     * "Watch Later" and "Stop Watching" from the row's action sheet. Limited to
+     * those two target statuses (SetShowStatusRequest); scoped to the user's own
+     * tracking row, a no-op if the show isn't tracked.
+     */
+    public function setStatus(SetShowStatusRequest $request, Show $show): JsonResponse
+    {
+        $tracking = $request->user()->showTrackings()->where('show_id', $show->id)->first();
+
+        if ($tracking !== null) {
+            $tracking->update(['status' => $request->status()]);
+        }
+
+        return response()->json(['status' => $tracking?->status->value]);
+    }
+
+    /**
+     * Left-swipe "Remove" (spec Part 2 §2): drop this user's tracking row only.
+     * Deliberately distinct from destroy() — it must NEVER delete episode-watch
+     * rows. The menu only offers Remove when the show has no watched episodes, so
+     * there's normally no history at stake; even so, this fails safe and leaves
+     * any UserEpisodeWatch rows untouched rather than silently discarding watch
+     * history. Keyed by shared show id, scoped to the user, idempotent.
+     */
+    public function removeFromList(Request $request, Show $show): JsonResponse
+    {
+        $request->user()->showTrackings()->where('show_id', $show->id)->delete();
+
+        return response()->json(['tracked' => false]);
     }
 
     /**

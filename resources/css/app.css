@@ -23,6 +23,10 @@
     --color-card: var(--card);
     --color-card-foreground: var(--card-foreground);
 
+    /* An elevated opaque surface for list rows, a step lighter than the page so
+       cards read as distinct from the background (which --card matches). */
+    --color-surface: var(--surface);
+
     --color-popover: var(--popover);
     --color-popover-foreground: var(--popover-foreground);
 
@@ -66,6 +70,7 @@
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
     --card-foreground: oklch(0.145 0 0);
+    --surface: oklch(0.965 0 0);
     --popover: oklch(1 0 0);
     --popover-foreground: oklch(0.145 0 0);
     --primary: oklch(0.205 0 0);
@@ -102,6 +107,7 @@
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.145 0 0);
     --card-foreground: oklch(0.985 0 0);
+    --surface: oklch(0.213 0 0);
     --popover: oklch(0.145 0 0);
     --popover-foreground: oklch(0.985 0 0);
     --primary: oklch(0.985 0 0);
@@ -140,4 +146,30 @@
     body {
         @apply bg-background text-foreground;
     }
+
+    /* Hide scrollbars everywhere while keeping scroll functional. */
+    * {
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE and Edge */
+    }
+
+    *::-webkit-scrollbar {
+        display: none; /* Chrome, Safari, and Opera */
+    }
+}
+
+/* The green "watched" sweep that covers a Watch List row when its last
+   available episode is marked watched, just before the row collapses away. */
+@keyframes watch-sweep {
+    from {
+        transform: scaleX(0);
+    }
+    to {
+        transform: scaleX(1);
+    }
+}
+
+.animate-watch-sweep {
+    transform-origin: left;
+    animation: watch-sweep 440ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }

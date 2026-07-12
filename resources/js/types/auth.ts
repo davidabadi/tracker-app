@@ -5,6 +5,9 @@ export type User = {
     avatar?: string;
     email_verified_at: string | null;
     two_factor_enabled?: boolean;
+    // IANA timezone (e.g. "America/New_York"), auto-detected from the browser;
+    // null until first detected. Drives the user's calendar-day cutoff.
+    timezone: string | null;
     created_at: string;
     updated_at: string;
     [key: string]: unknown;

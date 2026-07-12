@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -19,6 +20,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property int $id
  * @property string $name
  * @property string $email
+ * @property string|null $timezone
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $two_factor_secret
@@ -28,7 +30,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable(['name', 'email', 'password', 'timezone'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements PasskeyUser
 {
@@ -47,6 +49,31 @@ class User extends Authenticatable implements PasskeyUser
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
         ];
+    }
+
+    /**
+     * The timezone to reason about this user's calendar in — their own detected
+     * timezone, falling back to the app timezone (UTC) until one is detected.
+     */
+    public function effectiveTimezone(): string
+    {
+        return $this->timezone ?? config('app.timezone');
+    }
+
+    /**
+     * This user's current calendar date, expressed at UTC midnight.
+     *
+     * air_date / release_date are stored as timezone-less dates, so "today" is
+     * pinned to UTC midnight of the user's local date to compare cleanly against
+     * them and to yield whole-day differences. Without this, an evening in the US
+     * (already past midnight UTC) rolls the calendar forward a day and tomorrow's
+     * episodes read as "Today".
+     */
+    public function localToday(): CarbonImmutable
+    {
+        return CarbonImmutable::parse(
+            now($this->effectiveTimezone())->toDateString()
+        );
     }
 
     /**

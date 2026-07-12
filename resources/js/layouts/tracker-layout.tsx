@@ -16,6 +16,7 @@ import {
 import { UserInfo } from '@/components/user-info';
 import { UserMenuContent } from '@/components/user-menu-content';
 import { useCurrentUrl } from '@/hooks/use-current-url';
+import { useTimezoneSync } from '@/hooks/use-timezone-sync';
 import { cn } from '@/lib/utils';
 import { movies, profile, search, shows } from '@/routes';
 import type { Auth } from '@/types';
@@ -159,6 +160,8 @@ export default function TrackerLayout({
     children: React.ReactNode;
 }) {
     const { auth } = usePage<{ auth: Auth }>().props;
+
+    useTimezoneSync();
 
     return (
         <div className="min-h-svh bg-background text-foreground">

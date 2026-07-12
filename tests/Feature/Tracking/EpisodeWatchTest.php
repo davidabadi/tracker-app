@@ -44,31 +44,71 @@ it('redirects guests away from toggling an episode', function () {
 |--------------------------------------------------------------------------
 */
 
-it('toggles an episode watched, stamping a watched_date, then back off', function () {
+it('marks an episode watched (count 0 → 1), stamping a watched_date, then resets it off', function () {
     $user = User::factory()->create();
     [$show, $season1] = makeShowWithEpisodes();
     $episode = $season1->first();
 
-    // On: creates the watch row, watched true + watched_date set.
+    // Default action is increment: creates the watch row at count 1, watched.
     $this->actingAs($user)
         ->patchJson(route('track.episodes.watched', $episode))
         ->assertOk()
         ->assertJsonPath('watch.watched', true)
+        ->assertJsonPath('watch.watch_count', 1)
         ->assertJsonPath('watch.episode_id', $episode->id);
 
     $watch = UserEpisodeWatch::where(['user_id' => $user->id, 'episode_id' => $episode->id])->firstOrFail();
     expect($watch->watched)->toBeTrue()
+        ->and($watch->watch_count)->toBe(1)
         ->and($watch->watched_date)->not->toBeNull();
 
-    // Off again: genuine toggle — back to the original state, watched_date cleared.
+    // Reset: back to not watched, count 0, watched_date cleared.
     $this->actingAs($user)
-        ->patchJson(route('track.episodes.watched', $episode))
+        ->patchJson(route('track.episodes.watched', $episode), ['action' => 'reset'])
         ->assertOk()
         ->assertJsonPath('watch.watched', false)
+        ->assertJsonPath('watch.watch_count', 0)
         ->assertJsonPath('watch.watched_date', null);
 
     expect($watch->fresh()->watched)->toBeFalse()
+        ->and($watch->fresh()->watch_count)->toBe(0)
         ->and($watch->fresh()->watched_date)->toBeNull();
+});
+
+it('increments the watch count on repeated "watched again" (rewatches)', function () {
+    $user = User::factory()->create();
+    [$show, $season1] = makeShowWithEpisodes();
+    $episode = $season1->first();
+
+    $this->actingAs($user)->patchJson(route('track.episodes.watched', $episode), ['action' => 'increment'])
+        ->assertOk()->assertJsonPath('watch.watch_count', 1);
+    $this->actingAs($user)->patchJson(route('track.episodes.watched', $episode), ['action' => 'increment'])
+        ->assertOk()->assertJsonPath('watch.watch_count', 2);
+    $this->actingAs($user)->patchJson(route('track.episodes.watched', $episode), ['action' => 'increment'])
+        ->assertOk()->assertJsonPath('watch.watch_count', 3)->assertJsonPath('watch.watched', true);
+});
+
+it('collapses a multi-watch count back to one with set_once', function () {
+    $user = User::factory()->create();
+    [$show, $season1] = makeShowWithEpisodes();
+    $episode = $season1->first();
+    $user->episodeWatches()->create(['episode_id' => $episode->id, 'watched' => true, 'watch_count' => 4]);
+
+    $this->actingAs($user)
+        ->patchJson(route('track.episodes.watched', $episode), ['action' => 'set_once'])
+        ->assertOk()
+        ->assertJsonPath('watch.watch_count', 1)
+        ->assertJsonPath('watch.watched', true);
+});
+
+it('rejects an unknown watch action', function () {
+    $user = User::factory()->create();
+    [$show, $season1] = makeShowWithEpisodes();
+
+    $this->actingAs($user)
+        ->patchJson(route('track.episodes.watched', $season1->first()), ['action' => 'nonsense'])
+        ->assertStatus(422)
+        ->assertJsonValidationErrorFor('action');
 });
 
 it('auto-tracks an untracked show as "watching" when an episode is first toggled', function () {
@@ -121,9 +161,11 @@ it('bulk-marks every episode in a season watched in one batch, leaving other sea
         ->assertJsonPath('episodes_affected', 3)
         ->assertJsonPath('watched', true);
 
-    // Real batch: exactly one statement touches user_episode_watches, not N.
+    // Real batch: exactly one write statement touches user_episode_watches, not
+    // N (a single read to skip already-watched rows is fine — what matters is the
+    // write is one upsert, never a per-episode loop).
     $watchWrites = collect(DB::getQueryLog())
-        ->filter(fn ($q) => str_contains($q['query'], 'user_episode_watches'))
+        ->filter(fn ($q) => str_contains($q['query'], 'insert into "user_episode_watches"'))
         ->count();
     expect($watchWrites)->toBe(1);
     DB::disableQueryLog();
@@ -143,6 +185,24 @@ it('bulk-marks every episode in a season watched in one batch, leaving other sea
             'episode_id' => $episode->id,
         ]);
     }
+});
+
+it('preserves an existing rewatch count when bulk-marking a season watched', function () {
+    $user = User::factory()->create();
+    [$show, $season1] = makeShowWithEpisodes();
+    $rewatched = $season1->first();
+    // This episode has already been watched three times.
+    $user->episodeWatches()->create(['episode_id' => $rewatched->id, 'watched' => true, 'watch_count' => 3]);
+
+    $this->actingAs($user)
+        ->patchJson(route('track.shows.seasons.watched', ['show' => $show->id, 'season' => 1]), ['watched' => true])
+        ->assertOk();
+
+    // The rewatch count survives; the others are freshly at a single watch.
+    expect($user->episodeWatches()->where('episode_id', $rewatched->id)->sole()->watch_count)->toBe(3);
+    $season1->reject(fn ($e) => $e->id === $rewatched->id)->each(function ($episode) use ($user) {
+        expect($user->episodeWatches()->where('episode_id', $episode->id)->sole()->watch_count)->toBe(1);
+    });
 });
 
 it('bulk-unmarks a whole season watched=false, clearing watched_date', function () {

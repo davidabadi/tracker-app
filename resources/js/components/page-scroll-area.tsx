@@ -9,14 +9,17 @@ import { cn } from '@/lib/utils';
 export function PageScrollArea({
     children,
     className,
+    scrollRef,
 }: {
     children: React.ReactNode;
     className?: string;
+    scrollRef?: React.Ref<HTMLDivElement>;
 }) {
     return (
         <div
+            ref={scrollRef}
             className={cn(
-                'flex min-h-0 flex-1 flex-col overflow-y-auto pb-24 md:pb-8',
+                'flex min-h-0 flex-1 flex-col overflow-y-auto pb-32 md:pb-16',
                 className,
             )}
         >

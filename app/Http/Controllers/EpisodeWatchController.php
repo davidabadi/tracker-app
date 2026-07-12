@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\ShowStatus;
 use App\Http\Requests\ToggleSeasonWatchedRequest;
+use App\Http\Requests\WatchActionRequest;
 use App\Models\Episode;
 use App\Models\Show;
 use App\Models\UserEpisodeWatch;
@@ -37,12 +38,13 @@ use Illuminate\Http\Request;
 class EpisodeWatchController extends Controller
 {
     /**
-     * Toggle one episode's watched state for this user. Find-or-creates the
-     * per-user watch row (auto-tracking the show as "watching" first), then flips
-     * it: watched_date is stamped "now" on watch and cleared on unwatch. Genuine
-     * toggle — calling it twice returns to the original state.
+     * Apply a multi-watch action to one episode for this user. Find-or-creates
+     * the per-user watch row (auto-tracking the show as "watching" first), then
+     * applies the requested action: increment (mark watched / rewatch),
+     * set_once (collapse to one watch), or reset (mark not watched). watched_date
+     * tracks the most recent watch.
      */
-    public function toggle(Request $request, Episode $episode, TrackingStatusService $trackingStatus): JsonResponse
+    public function toggle(WatchActionRequest $request, Episode $episode, TrackingStatusService $trackingStatus): JsonResponse
     {
         $this->ensureShowTracked($request, $episode->show_id);
 
@@ -50,7 +52,7 @@ class EpisodeWatchController extends Controller
             ['episode_id' => $episode->id],
         );
 
-        $watch->toggleWatched();
+        $watch->applyWatchAction($request->action());
         $watch->save();
 
         // Marking watched can auto-promote the show's status (Watch Later /
@@ -100,6 +102,7 @@ class EpisodeWatchController extends Controller
                 'user_id' => $request->user()->id,
                 'episode_id' => $id,
                 'watched' => true,
+                'watch_count' => 1,
                 'watched_date' => $now,
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -108,7 +111,7 @@ class EpisodeWatchController extends Controller
             ->all();
 
         if ($rows !== []) {
-            UserEpisodeWatch::upsert($rows, ['user_id', 'episode_id'], ['watched', 'watched_date', 'updated_at']);
+            UserEpisodeWatch::upsert($rows, ['user_id', 'episode_id'], ['watched', 'watch_count', 'watched_date', 'updated_at']);
 
             $trackingStatus->recordWatchActivity($request->user(), $episode->show);
         }
@@ -135,25 +138,42 @@ class EpisodeWatchController extends Controller
         $watched = $request->watched();
         $episodeIds = $show->episodes()->where('season_number', $season)->pluck('id');
 
+        // Marking a season watched must not wipe out per-episode rewatch counts:
+        // episodes already watched (count > 0) keep their count and date, and only
+        // the not-yet-watched ones are bumped to a single watch. Unmarking resets
+        // the whole season to zero.
+        $targetIds = $episodeIds;
+
+        if ($watched) {
+            $alreadyWatched = $request->user()->episodeWatches()
+                ->whereIn('episode_id', $episodeIds)
+                ->where('watched', true)
+                ->pluck('episode_id')
+                ->flip();
+
+            $targetIds = $episodeIds->reject(fn (int $id): bool => $alreadyWatched->has($id))->values();
+        }
+
         $now = now();
-        $rows = $episodeIds->map(fn (int $id): array => [
+        $rows = $targetIds->map(fn (int $id): array => [
             'user_id' => $request->user()->id,
             'episode_id' => $id,
             'watched' => $watched,
+            'watch_count' => $watched ? 1 : 0,
             'watched_date' => $watched ? $now : null,
             'created_at' => $now,
             'updated_at' => $now,
         ])->all();
 
-        // One statement: insert rows that don't exist yet, update watched state
-        // on those that do, keyed by the (user_id, episode_id) unique index.
+        // One write statement: insert rows that don't exist yet, update the rest,
+        // keyed by the (user_id, episode_id) unique index — never a per-episode loop.
         if ($rows !== []) {
-            UserEpisodeWatch::upsert($rows, ['user_id', 'episode_id'], ['watched', 'watched_date', 'updated_at']);
+            UserEpisodeWatch::upsert($rows, ['user_id', 'episode_id'], ['watched', 'watch_count', 'watched_date', 'updated_at']);
         }
 
         // Same status derivation as the single toggle: bulk-watching a season
         // can promote the show to Watching or complete it into Finished.
-        if ($watched && $rows !== []) {
+        if ($watched && $episodeIds->isNotEmpty()) {
             $trackingStatus->recordWatchActivity($request->user(), $show);
         }
 
@@ -192,6 +212,7 @@ class EpisodeWatchController extends Controller
                 'episode_number' => $episode->episode_number,
                 'title' => $episode->title,
                 'watched' => (bool) $watch?->watched,
+                'watch_count' => (int) ($watch?->watch_count ?? 0),
                 'watched_date' => $watch?->watched_date?->toIso8601String(),
             ];
         });
@@ -225,6 +246,7 @@ class EpisodeWatchController extends Controller
             'user_id' => $watch->user_id,
             'episode_id' => $watch->episode_id,
             'watched' => $watch->watched,
+            'watch_count' => $watch->watch_count,
             'watched_date' => $watch->watched_date?->toIso8601String(),
         ];
     }

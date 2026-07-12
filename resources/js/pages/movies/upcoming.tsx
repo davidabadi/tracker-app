@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Countdown } from '@/components/countdown';
 import { EmptyState } from '@/components/empty-state';
 import Heading from '@/components/heading';
+import { MediaRow } from '@/components/media-row';
 import { MediaSubTabs } from '@/components/media-sub-tabs';
 import { MovieDetailModal } from '@/components/movie-detail-modal';
 import { PageScrollArea } from '@/components/page-scroll-area';
@@ -42,33 +43,14 @@ function MovieRow({
     onOpen: () => void;
 }) {
     return (
-        <li
+        <MediaRow
+            posterUrl={movie.poster_url}
+            fallbackIcon={Film}
+            primary={movie.title}
+            secondary={formatLongDate(parseDateString(movie.release_date))}
             onClick={onOpen}
-            className="flex cursor-pointer items-stretch overflow-hidden rounded-xl bg-card transition-colors hover:bg-card/80"
-        >
-            {movie.poster_url ? (
-                <img
-                    src={movie.poster_url}
-                    alt=""
-                    className="w-20 shrink-0 object-cover"
-                />
-            ) : (
-                <div className="flex w-20 shrink-0 items-center justify-center bg-muted">
-                    <Film className="size-6 text-muted-foreground" />
-                </div>
-            )}
-            <div className="flex min-w-0 flex-1 items-center gap-3 p-4">
-                <div className="min-w-0 flex-1 space-y-0.5">
-                    <p className="truncate text-base font-semibold">
-                        {movie.title}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                        {formatLongDate(parseDateString(movie.release_date))}
-                    </p>
-                </div>
-                <Countdown daysUntil={movie.days_until} />
-            </div>
-        </li>
+            trailing={<Countdown daysUntil={movie.days_until} />}
+        />
     );
 }
 

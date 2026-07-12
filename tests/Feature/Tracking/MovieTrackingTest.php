@@ -40,31 +40,49 @@ it('is idempotent per user and does not duplicate the movie', function () {
     expect(UserMovieTracking::where('user_id', $user->id)->count())->toBe(1);
 });
 
-it('toggles watched on and stamps a watched_date, then back off', function () {
+it('marks watched (count 0 → 1) stamping a watched_date, then resets it off', function () {
     $user = User::factory()->create();
     $movie = Movie::factory()->create();
     $tracking = $user->movieTrackings()->create(['movie_id' => $movie->id]);
 
-    // On: watched true + watched_date set.
+    // Default action increments to a single watch.
     $this->actingAs($user)
         ->patchJson(route('track.movies.watched', $movie))
         ->assertOk()
-        ->assertJsonPath('tracking.watched', true);
+        ->assertJsonPath('tracking.watched', true)
+        ->assertJsonPath('tracking.watch_count', 1);
 
     $tracking->refresh();
     expect($tracking->watched)->toBeTrue()
+        ->and($tracking->watch_count)->toBe(1)
         ->and($tracking->watched_date)->not->toBeNull();
 
-    // Off again: watched false + watched_date cleared.
+    // Reset: watched false, count 0, watched_date cleared.
     $this->actingAs($user)
-        ->patchJson(route('track.movies.watched', $movie))
+        ->patchJson(route('track.movies.watched', $movie), ['action' => 'reset'])
         ->assertOk()
         ->assertJsonPath('tracking.watched', false)
+        ->assertJsonPath('tracking.watch_count', 0)
         ->assertJsonPath('tracking.watched_date', null);
 
     $tracking->refresh();
     expect($tracking->watched)->toBeFalse()
+        ->and($tracking->watch_count)->toBe(0)
         ->and($tracking->watched_date)->toBeNull();
+});
+
+it('increments and collapses a movie watch count', function () {
+    $user = User::factory()->create();
+    $movie = Movie::factory()->create();
+
+    $this->actingAs($user)->patchJson(route('track.movies.watched', $movie), ['action' => 'increment'])
+        ->assertOk()->assertJsonPath('tracking.watch_count', 1);
+    $this->actingAs($user)->patchJson(route('track.movies.watched', $movie), ['action' => 'increment'])
+        ->assertOk()->assertJsonPath('tracking.watch_count', 2);
+
+    // Collapse a run of rewatches back to a single watch.
+    $this->actingAs($user)->patchJson(route('track.movies.watched', $movie), ['action' => 'set_once'])
+        ->assertOk()->assertJsonPath('tracking.watch_count', 1)->assertJsonPath('tracking.watched', true);
 });
 
 it('auto-tracks an untracked movie when first marked watched', function () {

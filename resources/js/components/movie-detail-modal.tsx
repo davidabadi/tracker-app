@@ -1,12 +1,12 @@
 import { router, useHttp } from '@inertiajs/react';
 import {
+    BookmarkCheck,
+    BookmarkPlus,
     CalendarDays,
-    Check,
     Clock,
     Eye,
     EyeOff,
     Film,
-    Plus,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -16,7 +16,9 @@ import {
 } from '@/actions/App/Http/Controllers/MovieTrackingController';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { DetailModal, DetailModalSkeleton } from '@/components/detail-modal';
-import { WatchedCircle } from '@/components/watched-circle';
+import { MediaWatchControl } from '@/components/media-watch-control';
+import { nextWatchCount } from '@/components/watched-toggle';
+import type { WatchAction } from '@/components/watched-toggle';
 import { formatLongDate, parseDateString } from '@/lib/dates';
 import { cn } from '@/lib/utils';
 import { show as movieDetail } from '@/routes/movies';
@@ -41,6 +43,7 @@ type MovieDetailPayload = {
     };
     tracked: boolean;
     watched: boolean;
+    watchCount: number;
     watchedDate: string | null;
     collection: {
         name: string;
@@ -49,8 +52,7 @@ type MovieDetailPayload = {
 };
 
 type MovieSource =
-    | { kind: 'tmdb'; id: number }
-    | { kind: 'library'; id: number };
+    { kind: 'tmdb'; id: number } | { kind: 'library'; id: number };
 
 function localToday(): string {
     const now = new Date();
@@ -87,14 +89,16 @@ export function MovieDetailModal({
     const [failed, setFailed] = useState(false);
 
     const [tracked, setTracked] = useState(false);
-    const [watched, setWatched] = useState(false);
+    const [watchCount, setWatchCount] = useState(0);
     const [watchedDate, setWatchedDate] = useState<string | null>(null);
     const [confirmingUntrack, setConfirmingUntrack] = useState(false);
+
+    const watched = watchCount > 0;
 
     const dirty = useRef(false);
 
     const { get } = useHttp({});
-    const toggleHttp = useHttp({});
+    const toggleHttp = useHttp({ action: 'increment' as WatchAction });
     const trackHttp = useHttp({ tmdb_id: null as number | null });
     const untrackHttp = useHttp({});
 
@@ -110,7 +114,7 @@ export function MovieDetailModal({
 
                 setData(payload);
                 setTracked(payload.tracked);
-                setWatched(payload.watched);
+                setWatchCount(payload.watchCount);
                 setWatchedDate(payload.watchedDate);
             },
             onHttpException: () => setFailed(true),
@@ -126,24 +130,26 @@ export function MovieDetailModal({
         router.flushAll();
     }
 
-    function handleToggleWatched() {
+    function handleWatchAction(action: WatchAction) {
         if (toggleHttp.processing || !data) {
             return;
         }
 
-        const next = !watched;
+        const previousCount = watchCount;
         const previousDate = watchedDate;
         const previousTracked = tracked;
+        const next = nextWatchCount(watchCount, action);
 
         markDirty();
-        setWatched(next);
-        setWatchedDate(next ? localToday() : null);
+        setWatchCount(next);
+        setWatchedDate(next > 0 ? localToday() : null);
         // The toggle endpoint auto-creates the tracking row.
         setTracked(true);
 
+        toggleHttp.transform(() => ({ action }));
         toggleHttp.patch(toggleMovieWatched.url(data.movie.id), {
             onError: () => {
-                setWatched(!next);
+                setWatchCount(previousCount);
                 setWatchedDate(previousDate);
                 setTracked(previousTracked);
             },
@@ -175,19 +181,19 @@ export function MovieDetailModal({
             return;
         }
 
-        const snapshot = { tracked, watched, watchedDate };
+        const snapshot = { tracked, watchCount, watchedDate };
 
         setConfirmingUntrack(false);
         markDirty();
         // Untracking resets progress: the tracking row carries watched state.
         setTracked(false);
-        setWatched(false);
+        setWatchCount(0);
         setWatchedDate(null);
 
         untrackHttp.delete(destroyMovieTracking.url(data.movie.id), {
             onError: () => {
                 setTracked(snapshot.tracked);
-                setWatched(snapshot.watched);
+                setWatchCount(snapshot.watchCount);
                 setWatchedDate(snapshot.watchedDate);
             },
         });
@@ -229,46 +235,12 @@ export function MovieDetailModal({
                                 <h1 className="min-w-0 truncate text-2xl font-bold">
                                     {data.movie.title}
                                 </h1>
-                                <div className="flex shrink-0 items-center gap-2.5">
-                                    {(tracked || canTrack) && (
-                                        <button
-                                            type="button"
-                                            onClick={
-                                                tracked
-                                                    ? () =>
-                                                          setConfirmingUntrack(
-                                                              true,
-                                                          )
-                                                    : handleTrack
-                                            }
-                                            aria-label={
-                                                tracked
-                                                    ? `Untrack ${data.movie.title}`
-                                                    : `Track ${data.movie.title}`
-                                            }
-                                            className={cn(
-                                                'flex size-11 shrink-0 items-center justify-center rounded-xl border transition-colors',
-                                                tracked
-                                                    ? 'border-emerald-500 bg-emerald-500 text-white'
-                                                    : 'border-border bg-background/60 text-muted-foreground backdrop-blur hover:border-foreground/40 hover:text-foreground',
-                                            )}
-                                        >
-                                            {tracked ? (
-                                                <Check
-                                                    className="size-5"
-                                                    strokeWidth={2.5}
-                                                />
-                                            ) : (
-                                                <Plus className="size-5" />
-                                            )}
-                                        </button>
-                                    )}
-                                    <WatchedCircle
-                                        watched={watched}
-                                        onToggle={handleToggleWatched}
-                                        label={data.movie.title}
-                                    />
-                                </div>
+                                <MediaWatchControl
+                                    count={watchCount}
+                                    label={data.movie.title}
+                                    onAction={handleWatchAction}
+                                    disabled={toggleHttp.processing}
+                                />
                             </div>
                         </div>
 
@@ -298,6 +270,8 @@ export function MovieDetailModal({
                                             {watchedDate
                                                 ? `Watched ${formatLongDate(parseDateString(watchedDate))}`
                                                 : 'Watched'}
+                                            {watchCount > 1 &&
+                                                ` · ${watchCount}×`}
                                         </>
                                     ) : (
                                         <>
@@ -307,6 +281,39 @@ export function MovieDetailModal({
                                     )}
                                 </span>
                             </div>
+
+                            {/* Watchlist membership — kept well away from the
+                                round watched toggle so the two aren't confused.
+                                Adding to the list is separate from marking it
+                                watched (which auto-adds it anyway). */}
+                            {tracked ? (
+                                <div className="mb-6 flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3">
+                                    <span className="inline-flex items-center gap-2 text-sm font-medium">
+                                        <BookmarkCheck className="size-4 text-emerald-400" />
+                                        On your watchlist
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setConfirmingUntrack(true)
+                                        }
+                                        className="text-sm font-medium text-red-500 transition-colors hover:text-red-400"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            ) : (
+                                canTrack && (
+                                    <button
+                                        type="button"
+                                        onClick={handleTrack}
+                                        className="mb-6 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold transition-colors hover:border-foreground/40 hover:bg-card/70"
+                                    >
+                                        <BookmarkPlus className="size-4" />
+                                        Add to Watchlist
+                                    </button>
+                                )
+                            )}
 
                             <section>
                                 <h2 className="mb-2 text-lg font-semibold">
