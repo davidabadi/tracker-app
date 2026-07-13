@@ -45,7 +45,7 @@ class TrackMovie extends Command
         $this->line('  runtime: '.($movie->runtime_minutes ?? '(none)').'m');
 
         if ($this->option('toggle')) {
-            $tracking->toggleWatched();
+            $tracking->setWatchCount($tracking->watched ? 0 : 1);
             $tracking->save();
         }
 

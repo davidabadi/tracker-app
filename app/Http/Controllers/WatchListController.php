@@ -207,7 +207,7 @@ class WatchListController extends Controller
     private function watchesFor(User $user, Collection $trackings): Collection
     {
         $episodeIds = $trackings
-            ->flatMap(fn (UserShowTracking $tracking): Collection => $tracking->show?->episodes ?? collect())
+            ->flatMap(fn (UserShowTracking $tracking): Collection => $tracking->show->episodes ?? collect())
             ->pluck('id');
 
         return $user->episodeWatches()
@@ -334,7 +334,7 @@ class WatchListController extends Controller
             'episode_number' => $episode->episode_number,
             'title' => $episode->title,
             'air_date' => $episode->air_date?->toDateString(),
-            'watch_count' => (int) ($watches->get($episode->id)?->watch_count ?? 0),
+            'watch_count' => (int) ($watches->get($episode->id)->watch_count ?? 0),
         ];
     }
 

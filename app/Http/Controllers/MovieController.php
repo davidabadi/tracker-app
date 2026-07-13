@@ -45,7 +45,7 @@ class MovieController extends Controller
             ],
             'tracked' => $tracking !== null,
             'watched' => (bool) $tracking?->watched,
-            'watchCount' => (int) ($tracking?->watch_count ?? 0),
+            'watchCount' => (int) ($tracking->watch_count ?? 0),
             'watchedDate' => $tracking?->watched_date?->toDateString(),
             'collection' => $this->collectionFor($movie, $tmdbId),
         ]);

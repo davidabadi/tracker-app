@@ -212,7 +212,7 @@ class EpisodeWatchController extends Controller
                 'episode_number' => $episode->episode_number,
                 'title' => $episode->title,
                 'watched' => (bool) $watch?->watched,
-                'watch_count' => (int) ($watch?->watch_count ?? 0),
+                'watch_count' => (int) ($watch->watch_count ?? 0),
                 'watched_date' => $watch?->watched_date?->toIso8601String(),
             ];
         });
