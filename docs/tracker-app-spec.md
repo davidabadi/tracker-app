@@ -213,7 +213,7 @@ Status of the original build order plus features layered on since. Checked = shi
 
 ### Not yet built
 
-- [ ] **Profile screen** — currently a placeholder (`resources/js/pages/profile.tsx` shows a "coming soon" card). Needs the real stats: total watch time (Σ `runtime_minutes` over this user's watched episodes + movies) and episodes-watched count.
+- [x] **Profile screen** — private, rewatch-aware TV/movie time and watch-count stats; recent media shelves; lazy full-screen show/movie libraries grouped by status with aired-episode progress; existing detail modals and account menu integrated.
 - [ ] **Consolidate settings into the app shell** — migrate the starter-kit settings / native Laravel pages (`settings/profile`, `settings/security`, `settings/appearance`, auth pages) into the TV-Time-style dashboard so they feel native to the tracker rather than bolted-on starter-kit screens.
 - [ ] **Yamtrack CSV importer** — per-user one-time import (§7). Map `source=tmdb` rows into `media_external_ids`, find-or-create the shared Show/Episode/Movie, then create per-user tracking rows for the importing user. Inspect a real export's headers before finalizing.
 - [ ] **Plex integration** — sync watched state from a Plex server (scrobble / library) as an additional per-user source; evaluate other providers (Jellyfin, Trakt, Emby) behind the same provider seam as TMDB.

@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 /**
  * Empty state for screens whose feature is live but currently has no data —
@@ -8,13 +9,20 @@ export function EmptyState({
     icon: Icon,
     title,
     description,
+    className,
 }: {
     icon: LucideIcon;
     title: string;
     description: string;
+    className?: string;
 }) {
     return (
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border/70 px-6 py-20 text-center">
+        <div
+            className={cn(
+                'flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border/70 px-6 py-20 text-center',
+                className,
+            )}
+        >
             <div className="flex size-14 items-center justify-center rounded-2xl bg-muted">
                 <Icon className="size-7 text-muted-foreground" />
             </div>

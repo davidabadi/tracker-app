@@ -4,6 +4,7 @@ use App\Http\Controllers\EpisodeController;
 use App\Http\Controllers\EpisodeWatchController;
 use App\Http\Controllers\MovieController;
 use App\Http\Controllers\MovieTrackingController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ShowController;
 use App\Http\Controllers\ShowTrackingController;
@@ -78,7 +79,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('shows', [WatchListController::class, 'shows'])->name('shows');
     Route::get('movies', [WatchListController::class, 'movies'])->name('movies');
     Route::get('search', [SearchController::class, 'index'])->name('search');
-    Route::inertia('profile', 'profile')->name('profile');
+    Route::get('profile', [ProfileController::class, 'index'])->name('profile');
+    Route::get('profile/library/shows', [ProfileController::class, 'shows'])
+        ->name('profile.library.shows');
+    Route::get('profile/library/movies', [ProfileController::class, 'movies'])
+        ->name('profile.library.movies');
 
     // Watched History (spec Part 2 §3): cursor-paginated JSON, fetched on demand
     // as the user scrolls up on the Shows watch list — never part of that page's

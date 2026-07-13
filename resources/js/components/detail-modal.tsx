@@ -41,7 +41,7 @@ export function DetailModal({
             role="dialog"
             aria-modal="true"
             aria-label={label}
-            className="fixed inset-0 z-30 md:left-60"
+            className="fixed inset-0 z-[60] md:left-60"
         >
             <div aria-hidden="true" className="absolute inset-0 bg-black/60" />
             <div className="absolute inset-x-0 top-3 bottom-0 mx-auto max-w-3xl overflow-x-hidden overflow-y-auto rounded-t-2xl border border-border/60 bg-background pb-24 shadow-2xl md:inset-x-8 md:top-8 md:bottom-8 md:rounded-2xl md:pb-8">
