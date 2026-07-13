@@ -20,10 +20,10 @@ what's next).
   season/episode detail with bulk "mark season watched" and "catch me up".
 - **Movies:** Watch List grid grouped Watched / Not Watched, Upcoming with
   release countdowns, TMDB collection (franchise) grouping.
-- **Rewatch-aware:** watched state is a *count*, not just a boolean — rewatches
+- **Rewatch-aware:** watched state is a _count_, not just a boolean — rewatches
   bump the count and keep the most-recent watch date.
-- **Automatic status:** watching an episode moves a show to *Watching*; finishing
-  every episode of a concluded show flips it to *Finished* — no manual dropdown.
+- **Automatic status:** watching an episode moves a show to _Watching_; finishing
+  every episode of a concluded show flips it to _Finished_ — no manual dropdown.
 - **Timezone-correct calendar days:** the Upcoming/Watch List "today" cutoff uses
   each user's browser-detected timezone, not the server's UTC.
 - **PWA:** installable, offline shell/image caching, effectively non-expiring
@@ -33,18 +33,18 @@ what's next).
 
 ## Tech Stack
 
-| Layer | Choice |
-|---|---|
-| Backend | Laravel 13, PHP **8.5** |
-| Frontend | Inertia.js v3 + React 19 + TypeScript, Tailwind v4, shadcn/ui |
-| Routing/types | Laravel Wayfinder (typed route/controller helpers) |
-| Auth | Laravel Fortify (2FA + passkeys) |
-| Database | PostgreSQL 17 |
-| Metadata | TMDB (v3 API); pluggable provider interface (Trakt planned) |
-| PWA | `vite-plugin-pwa` (Workbox) |
-| Jobs | Database queue + scheduler (nightly TMDB refresh) |
-| Deploy | Docker Compose behind an existing `cloudflared` tunnel |
-| Tests | Pest v4 |
+| Layer         | Choice                                                        |
+| ------------- | ------------------------------------------------------------- |
+| Backend       | Laravel 13, PHP **8.5**                                       |
+| Frontend      | Inertia.js v3 + React 19 + TypeScript, Tailwind v4, shadcn/ui |
+| Routing/types | Laravel Wayfinder (typed route/controller helpers)            |
+| Auth          | Laravel Fortify (2FA + passkeys)                              |
+| Database      | PostgreSQL 17                                                 |
+| Metadata      | TMDB (v3 API); pluggable provider interface (Trakt planned)   |
+| PWA           | `vite-plugin-pwa` (Workbox)                                   |
+| Jobs          | Database queue + scheduler (nightly TMDB refresh)             |
+| Deploy        | Docker Compose behind an existing `cloudflared` tunnel        |
+| Tests         | Pest v4                                                       |
 
 ## Requirements
 
@@ -67,7 +67,7 @@ tested against runs at **http://localhost:8080**.
 cp .env.example .env
 # edit .env: set APP_KEY (php artisan key:generate), DB_PASSWORD, TMDB_API_KEY
 
-docker compose up -d --build
+docker compose up -d --build --remove-orphans
 ```
 
 Services: `app` (PHP-FPM), `web` (nginx, exposes `${WEB_PORT:-8080}`), `db`
@@ -76,10 +76,10 @@ Services: `app` (PHP-FPM), `web` (nginx, exposes `${WEB_PORT:-8080}`), `db`
 on bring-up and its healthcheck passes once the DB is reachable and migrated.
 
 > **Code is baked into the images** (no bind mounts). After changing PHP or
-> frontend code, rebuild to see it: `docker compose up -d --build`.
+> frontend code, rebuild to see it: `docker compose up -d --build --remove-orphans`.
 
 Because `.env` sets `DB_HOST=db` (a Compose-internal hostname), host-side
-`php artisan` can't reach the database — run data/admin commands *inside* the
+`php artisan` can't reach the database — run data/admin commands _inside_ the
 container:
 
 ```bash
@@ -131,13 +131,13 @@ If a frontend change isn't showing up, you likely need `npm run dev` (or
 
 Run inside the `app` container under Docker, or directly (php85) locally:
 
-| Command | Purpose |
-|---|---|
-| `app:make-user` | Create a household account (`--name --email --password`, prompts if omitted). |
-| `app:track-show {tmdb} --user= --status=` | Find-or-create a TMDB show + full season/episode pull, track it for a user. |
-| `app:track-movie {tmdb} --user= --toggle` | Find-or-create a TMDB movie, track it, optionally mark watched. |
-| `tmdb:refresh` | Queue nightly refresh jobs for tracked shows/movies. Scheduled daily at 03:00. |
-| `app:tmdb-probe` | Read-only smoke test of the TMDB provider (no DB writes). |
+| Command                                   | Purpose                                                                        |
+| ----------------------------------------- | ------------------------------------------------------------------------------ |
+| `app:make-user`                           | Create a household account (`--name --email --password`, prompts if omitted).  |
+| `app:track-show {tmdb} --user= --status=` | Find-or-create a TMDB show + full season/episode pull, track it for a user.    |
+| `app:track-movie {tmdb} --user= --toggle` | Find-or-create a TMDB movie, track it, optionally mark watched.                |
+| `tmdb:refresh`                            | Queue nightly refresh jobs for tracked shows/movies. Scheduled daily at 03:00. |
+| `app:tmdb-probe`                          | Read-only smoke test of the TMDB provider (no DB writes).                      |
 
 ## Testing & quality
 

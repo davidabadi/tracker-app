@@ -92,3 +92,12 @@ it('links the PWA manifest in the document head', function () {
         ->get(route('shows'))
         ->assertSee('<link rel="manifest" href="/manifest.webmanifest">', escape: false);
 });
+
+it('uses the custom app icon as the favicon', function () {
+    $this->actingAs(User::factory()->create())
+        ->get(route('shows'))
+        ->assertSee('<link rel="icon" href="/icons/icon-192.png" type="image/png" sizes="192x192">', escape: false)
+        ->assertSee('<link rel="apple-touch-icon" href="/icons/icon-192.png">', escape: false)
+        ->assertDontSee('href="/favicon.ico"', escape: false)
+        ->assertDontSee('href="/favicon.svg"', escape: false);
+});

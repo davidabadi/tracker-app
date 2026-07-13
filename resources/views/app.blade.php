@@ -30,9 +30,8 @@
             }
         </style>
 
-        <link rel="icon" href="/favicon.ico" sizes="any">
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+        <link rel="icon" href="/icons/icon-192.png" type="image/png" sizes="192x192">
+        <link rel="apple-touch-icon" href="/icons/icon-192.png">
 
         {{-- PWA manifest (built by vite-plugin-pwa, served from the root route) --}}
         <link rel="manifest" href="/manifest.webmanifest">
