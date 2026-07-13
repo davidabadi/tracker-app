@@ -22,19 +22,18 @@ const BADGE_TONES: Record<RowBadgeTone, string> = {
  * the row isn't swipeable (Upcoming, Watched History).
  */
 export type RowSwipe = {
-    onSwipeRight?: () => void;
+    onSwipeRight?: (progress: number) => void;
     rightEnabled?: boolean;
-    onSwipeLeft?: () => void;
+    onSwipeLeft?: (progress: number) => void;
 };
 
-// How far the row must travel before releasing commits the gesture, and the
-// furthest it will slide (past which it just resists).
-const COMMIT_THRESHOLD = 72;
-const MAX_TRAVEL = 120;
+// Releasing commits once the row has traveled this share of its own width.
+const COMMIT_THRESHOLD_RATIO = 0.4;
 
 type DragState = {
     x: number;
     y: number;
+    width: number;
     locked: boolean;
 };
 
@@ -48,6 +47,7 @@ type DragState = {
  */
 function useRowSwipe(swipe: RowSwipe | undefined) {
     const [dx, setDx] = useState(0);
+    const [gestureWidth, setGestureWidth] = useState(0);
     const [settling, setSettling] = useState(false);
     const drag = useRef<DragState | null>(null);
     // The current offset, mirrored synchronously so release() reads the true
@@ -62,7 +62,7 @@ function useRowSwipe(swipe: RowSwipe | undefined) {
     const leftEnabled = swipe?.onSwipeLeft != null;
     const enabled = Boolean(swipe && (rightEnabled || leftEnabled));
 
-    function clamp(value: number): number {
+    function clamp(value: number, width: number): number {
         let next = value;
 
         if (next > 0 && !rightEnabled) {
@@ -73,7 +73,7 @@ function useRowSwipe(swipe: RowSwipe | undefined) {
             next = 0;
         }
 
-        return Math.max(-MAX_TRAVEL, Math.min(MAX_TRAVEL, next));
+        return Math.max(-width, Math.min(width, next));
     }
 
     function onPointerDown(event: React.PointerEvent) {
@@ -81,7 +81,15 @@ function useRowSwipe(swipe: RowSwipe | undefined) {
             return;
         }
 
-        drag.current = { x: event.clientX, y: event.clientY, locked: false };
+        const width = event.currentTarget.getBoundingClientRect().width;
+
+        drag.current = {
+            x: event.clientX,
+            y: event.clientY,
+            width,
+            locked: false,
+        };
+        setGestureWidth(width);
         // Clear last gesture's flag now: a touch swipe often fires no trailing
         // click to consume it, and a stale flag would eat the next real tap.
         swiped.current = false;
@@ -122,23 +130,26 @@ function useRowSwipe(swipe: RowSwipe | undefined) {
             }
         }
 
-        const next = clamp(moveX);
+        const next = clamp(moveX, state.width);
         offset.current = next;
         setDx(next);
     }
 
     function release() {
         const committed = offset.current;
+        const width = drag.current?.width ?? gestureWidth;
+        const commitThreshold = width * COMMIT_THRESHOLD_RATIO;
+        const progress = Math.min(1, Math.abs(committed) / width);
 
         drag.current = null;
         offset.current = 0;
         setSettling(true);
         setDx(0);
 
-        if (committed >= COMMIT_THRESHOLD) {
-            swipe?.onSwipeRight?.();
-        } else if (committed <= -COMMIT_THRESHOLD) {
-            swipe?.onSwipeLeft?.();
+        if (committed >= commitThreshold) {
+            swipe?.onSwipeRight?.(progress);
+        } else if (committed <= -commitThreshold) {
+            swipe?.onSwipeLeft?.(progress);
         }
     }
 
@@ -167,6 +178,7 @@ function useRowSwipe(swipe: RowSwipe | undefined) {
     return {
         enabled,
         dx,
+        gestureWidth,
         settling,
         rightEnabled,
         handlers: enabled
@@ -221,9 +233,13 @@ export function MediaRow({
     className?: string;
     swipe?: RowSwipe;
 }) {
-    const { enabled, dx, settling, handlers, guardClick } = useRowSwipe(swipe);
+    const { enabled, dx, gestureWidth, settling, handlers, guardClick } =
+        useRowSwipe(swipe);
 
-    const revealIntensity = Math.min(1, Math.abs(dx) / COMMIT_THRESHOLD);
+    const commitThreshold = gestureWidth * COMMIT_THRESHOLD_RATIO;
+    const revealIntensity = commitThreshold
+        ? Math.min(1, Math.abs(dx) / commitThreshold)
+        : 0;
 
     function handleClick() {
         if (guardClick()) {

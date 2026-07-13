@@ -1,5 +1,6 @@
 import { Head, router, useHttp } from '@inertiajs/react';
-import { Check, Tv } from 'lucide-react';
+import { Check, EyeOff, Tv } from 'lucide-react';
+import type { CSSProperties } from 'react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { toggle as toggleEpisode } from '@/actions/App/Http/Controllers/EpisodeWatchController';
 import {
@@ -130,6 +131,10 @@ export default function Shows({
     } | null>(null);
     // The row whose left-swipe status dialog is open, if any.
     const [statusRow, setStatusRow] = useState<ShowWatchRowData | null>(null);
+    const [statusCovering, setStatusCovering] = useState<{
+        id: number;
+        start: number;
+    } | null>(null);
 
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const historyRef = useRef<WatchedHistoryHandle | null>(null);
@@ -141,7 +146,10 @@ export default function Shows({
         ...haventStarted,
     ]);
     const [markingId, setMarkingId] = useState<number | null>(null);
-    const [coveringId, setCoveringId] = useState<number | null>(null);
+    const [coveringSweep, setCoveringSweep] = useState<{
+        id: number;
+        start: number;
+    } | null>(null);
     const [revealingId, setRevealingId] = useState<number | null>(null);
     const [collapsingId, setCollapsingId] = useState<number | null>(null);
 
@@ -203,7 +211,7 @@ export default function Shows({
 
     function finishAnim() {
         setMarkingId(null);
-        setCoveringId(null);
+        setCoveringSweep(null);
         setRevealingId(null);
         setCollapsingId(null);
     }
@@ -298,13 +306,13 @@ export default function Shows({
      * place and the row glides to the top of Watch Next (FLIP). Visuals are
      * optimistic; a background reload reconciles order/badges when it ends.
      */
-    function markWatched(row: ShowWatchRowData) {
+    function markWatched(row: ShowWatchRowData, sweepStart = 0) {
         if (markingId !== null || !row.episode) {
             return;
         }
 
         setMarkingId(row.show_id);
-        setCoveringId(row.show_id);
+        setCoveringSweep({ id: row.show_id, start: sweepStart });
         router.flushAll();
         historyRef.current?.recordWatch(row);
 
@@ -384,6 +392,34 @@ export default function Shows({
         }
     }
 
+    function openStatusMenu(row: ShowWatchRowData, sweepStart: number) {
+        if (statusCovering !== null) {
+            return;
+        }
+
+        setStatusCovering({ id: row.show_id, start: sweepStart });
+    }
+
+    function statusSweep(row: ShowWatchRowData) {
+        return statusCovering?.id === row.show_id ? (
+            <div
+                aria-hidden
+                style={
+                    {
+                        '--sweep-start': statusCovering.start,
+                    } as CSSProperties
+                }
+                onAnimationEnd={() => {
+                    setStatusCovering(null);
+                    setStatusRow(row);
+                }}
+                className="animate-status-sweep absolute inset-0 z-10 flex items-center justify-center bg-blue-500"
+            >
+                <EyeOff className="size-7 text-white" strokeWidth={2.5} />
+            </div>
+        ) : undefined;
+    }
+
     function renderRow(row: ShowWatchRowData) {
         return (
             <ShowWatchRow
@@ -397,8 +433,13 @@ export default function Shows({
                         : undefined
                 }
                 overlay={
-                    coveringId === row.show_id ? (
+                    coveringSweep?.id === row.show_id ? (
                         <div
+                            style={
+                                {
+                                    '--sweep-start': coveringSweep.start,
+                                } as CSSProperties
+                            }
                             className={cn(
                                 'animate-watch-sweep absolute inset-0 z-10 flex items-center justify-center bg-emerald-500',
                                 revealingId === row.show_id &&
@@ -410,15 +451,17 @@ export default function Shows({
                                 strokeWidth={2.5}
                             />
                         </div>
-                    ) : undefined
+                    ) : (
+                        statusSweep(row)
+                    )
                 }
                 onMarkWatched={() => markWatched(row)}
                 onOpenShow={() => openShow(row)}
                 onOpenEpisode={setEpisodeModalId}
                 swipe={{
-                    onSwipeRight: () => markWatched(row),
+                    onSwipeRight: (progress) => markWatched(row, progress),
                     rightEnabled: hasAired(row.episode),
-                    onSwipeLeft: () => setStatusRow(row),
+                    onSwipeLeft: (progress) => openStatusMenu(row, progress),
                 }}
             />
         );
@@ -429,12 +472,13 @@ export default function Shows({
             <ShowWatchRow
                 key={row.show_id}
                 row={row}
+                overlay={statusSweep(row)}
                 onOpenShow={() => openShow(row)}
                 onOpenEpisode={setEpisodeModalId}
                 swipe={{
                     onSwipeRight: () => incrementWatchLaterRow(row),
                     rightEnabled: hasAired(row.episode),
-                    onSwipeLeft: () => setStatusRow(row),
+                    onSwipeLeft: (progress) => openStatusMenu(row, progress),
                 }}
             />
         );
