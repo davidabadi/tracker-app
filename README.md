@@ -90,6 +90,29 @@ Point your existing `cloudflared` tunnel at the `web` service / host port; the
 tunnel terminates HTTPS, which service workers require. Set `APP_URL` to the
 public HTTPS URL in that case.
 
+## Running on Unraid with Compose Manager Plus
+
+This installation uses prebuilt images from GitHub Container Registry. It does
+not require a repository checkout or an image build on the Unraid server.
+
+1. In Compose Manager Plus, add a stack named `tracker-app`. Leave the external
+   ENV and indirect-path fields blank, enable default Compose file discovery,
+   and leave automatic override management enabled.
+2. Paste [`docker-compose.unraid.yml`](docker-compose.unraid.yml) into the
+   stack's Compose editor.
+3. Paste [`.env.unraid.example`](.env.unraid.example) into the ENV editor and
+   replace `APP_KEY`, `APP_URL`, `DB_PASSWORD`, and `TMDB_API_KEY`.
+4. Ensure the `DB_DATA_LOCATION` directory is on persistent Unraid storage,
+   then select **Compose Up**.
+5. Create the first account from the app container with
+   `php artisan app:make-user`.
+
+The `latest` image tag follows `main`. Pushing a tag beginning with `v` also
+publishes versioned `app` and `web` images; set `TRACKER_VERSION` to that tag to
+pin an installation. The first published GHCR packages may need to be made
+public from the repository owner's GitHub Packages settings before an
+unauthenticated Unraid server can pull them.
+
 ## Local (non-Docker) development
 
 ```bash
