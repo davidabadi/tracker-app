@@ -12,13 +12,10 @@ use App\Http\Controllers\UpcomingController;
 use App\Http\Controllers\WatchListController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
 // Also the PWA start_url: logged-in household members land straight in the app.
 Route::get('/', function () {
-    return auth()->check()
-        ? redirect()->route('shows')
-        : Inertia::render('welcome');
+    return redirect()->route('shows');
 })->name('home');
 
 // Serve the built service worker from the site root. vite-plugin-pwa emits it

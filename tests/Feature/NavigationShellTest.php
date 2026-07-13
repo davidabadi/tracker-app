@@ -29,12 +29,6 @@ it('sends logged-in users from the welcome page into the app', function () {
         ->assertRedirect(route('shows', absolute: false));
 });
 
-it('still shows the welcome page to guests', function () {
-    $this->get(route('home'))
-        ->assertOk()
-        ->assertInertia(fn (Assert $inertia) => $inertia->component('welcome'));
-});
-
 it('redirects the legacy dashboard route into the app', function () {
     $this->actingAs(User::factory()->create())
         ->get(route('dashboard'))
@@ -100,4 +94,24 @@ it('uses the custom app icon as the favicon', function () {
         ->assertSee('<link rel="apple-touch-icon" href="/icons/icon-192.png">', escape: false)
         ->assertDontSee('href="/favicon.ico"', escape: false)
         ->assertDontSee('href="/favicon.svg"', escape: false);
+});
+
+it('uses the Tracker branding throughout the React shell', function () {
+    $icon = File::get(resource_path('js/components/app-logo-icon.tsx'));
+    $logo = File::get(resource_path('js/components/app-logo.tsx'));
+    $trackerLayout = File::get(resource_path('js/layouts/tracker-layout.tsx'));
+    $welcome = File::get(resource_path('js/pages/welcome.tsx'));
+
+    expect($icon)
+        ->toContain('bg-emerald-500/15')
+        ->toContain('<Play')
+        ->not->toContain('<img')
+        ->and($logo)
+        ->toContain('Tracker')
+        ->not->toContain('Laravel Starter Kit')
+        ->and($trackerLayout)
+        ->toContain('<AppLogoIcon')
+        ->and($welcome)
+        ->toContain('<AppLogoIcon')
+        ->not->toContain('Laravel Logo');
 });

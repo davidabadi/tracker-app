@@ -1,13 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
-import {
-    ChevronsUpDown,
-    Film,
-    Play,
-    Search,
-    Tv,
-    UserRound,
-} from 'lucide-react';
+import { ChevronsUpDown, Film, Search, Tv, UserRound } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import AppLogoIcon from '@/components/app-logo-icon';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -41,9 +35,7 @@ function TrackerWordmark() {
             prefetch
             className="flex items-center gap-2.5 px-5 py-5"
         >
-            <span className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/15">
-                <Play className="size-4 fill-emerald-400 text-emerald-400" />
-            </span>
+            <AppLogoIcon alt="" className="size-8" />
             <span className="text-base font-semibold tracking-tight">
                 Tracker
             </span>
