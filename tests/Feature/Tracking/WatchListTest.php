@@ -276,6 +276,39 @@ it('keeps unwatched episodes and other members out of watched history', function
         ->assertJsonPath('rows.0.episode.id', $eps[0]->id);
 });
 
+it('returns an episode to watch next after it is marked not watched from history', function () {
+    $user = User::factory()->create();
+    [$show, $episodes] = makeReleasedShow(2);
+    $user->showTrackings()->create(['show_id' => $show->id, 'status' => ShowStatus::Watching]);
+
+    $episodes->each(fn (Episode $episode) => $user->episodeWatches()->create([
+        'episode_id' => $episode->id,
+        'watched' => true,
+        'watch_count' => 1,
+        'watched_date' => now(),
+    ]));
+
+    $episodeToRewatch = $episodes->first();
+
+    $this->actingAs($user)
+        ->patchJson(route('track.episodes.watched', $episodeToRewatch), ['action' => 'reset'])
+        ->assertOk()
+        ->assertJsonPath('watch.watched', false);
+
+    $this->actingAs($user)->getJson(route('shows.watched-history'))
+        ->assertOk()
+        ->assertJsonCount(1, 'rows')
+        ->assertJsonPath('rows.0.episode.id', $episodes->last()->id);
+
+    $this->actingAs($user)->get(route('shows'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('watchNext', 1)
+            ->where('watchNext.0.show_id', $show->id)
+            ->where('watchNext.0.episode.id', $episodeToRewatch->id)
+        );
+});
+
 it('moves a show to watch_later then stopped via setStatus', function () {
     $user = User::factory()->create();
     [$show] = makeReleasedShow(2);

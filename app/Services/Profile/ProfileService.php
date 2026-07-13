@@ -147,7 +147,7 @@ class ProfileService
                 "{$movieTable}.title",
                 "{$movieTable}.poster_image_url as poster_url",
             ])
-            ->orderByRaw("CASE WHEN {$trackingTable}.watch_count > 0 THEN 0 ELSE 1 END")
+            ->orderByRaw('CASE WHEN watch_count > 0 THEN 0 ELSE 1 END')
             ->orderByDesc("{$trackingTable}.watched_date")
             ->orderByDesc("{$trackingTable}.updated_at")
             ->orderByDesc("{$trackingTable}.id")
@@ -194,27 +194,27 @@ class ProfileService
         $movieTable = (new Movie)->getTable();
         $movieTrackingTable = (new UserMovieTracking)->getTable();
 
-        $episodeStats = DB::table($episodeWatchTable)
-            ->join($episodeTable, "{$episodeTable}.id", '=', "{$episodeWatchTable}.episode_id")
-            ->where("{$episodeWatchTable}.user_id", $user->id)
-            ->where("{$episodeWatchTable}.watch_count", '>', 0)
-            ->selectRaw("COALESCE(SUM({$episodeWatchTable}.watch_count), 0) AS watched_count")
-            ->selectRaw("COALESCE(SUM(COALESCE({$episodeTable}.runtime_minutes, 0) * {$episodeWatchTable}.watch_count), 0) AS watched_minutes")
+        $episodeStats = DB::table("{$episodeWatchTable} as episode_watches")
+            ->join("{$episodeTable} as episodes", 'episodes.id', '=', 'episode_watches.episode_id')
+            ->where('episode_watches.user_id', $user->id)
+            ->where('episode_watches.watch_count', '>', 0)
+            ->selectRaw('COALESCE(SUM(episode_watches.watch_count), 0) AS watched_count')
+            ->selectRaw('COALESCE(SUM(COALESCE(episodes.runtime_minutes, 0) * episode_watches.watch_count), 0) AS watched_minutes')
             ->first();
 
-        $movieStats = DB::table($movieTrackingTable)
-            ->join($movieTable, "{$movieTable}.id", '=', "{$movieTrackingTable}.movie_id")
-            ->where("{$movieTrackingTable}.user_id", $user->id)
-            ->where("{$movieTrackingTable}.watch_count", '>', 0)
-            ->selectRaw("COALESCE(SUM({$movieTrackingTable}.watch_count), 0) AS watched_count")
-            ->selectRaw("COALESCE(SUM(COALESCE({$movieTable}.runtime_minutes, 0) * {$movieTrackingTable}.watch_count), 0) AS watched_minutes")
+        $movieStats = DB::table("{$movieTrackingTable} as movie_trackings")
+            ->join("{$movieTable} as movies", 'movies.id', '=', 'movie_trackings.movie_id')
+            ->where('movie_trackings.user_id', $user->id)
+            ->where('movie_trackings.watch_count', '>', 0)
+            ->selectRaw('COALESCE(SUM(movie_trackings.watch_count), 0) AS watched_count')
+            ->selectRaw('COALESCE(SUM(COALESCE(movies.runtime_minutes, 0) * movie_trackings.watch_count), 0) AS watched_minutes')
             ->first();
 
         return [
-            'tv_minutes' => (int) ($episodeStats?->watched_minutes ?? 0),
-            'episodes_watched' => (int) ($episodeStats?->watched_count ?? 0),
-            'movie_minutes' => (int) ($movieStats?->watched_minutes ?? 0),
-            'movies_watched' => (int) ($movieStats?->watched_count ?? 0),
+            'tv_minutes' => (int) ($episodeStats->watched_minutes ?? 0),
+            'episodes_watched' => (int) ($episodeStats->watched_count ?? 0),
+            'movie_minutes' => (int) ($movieStats->watched_minutes ?? 0),
+            'movies_watched' => (int) ($movieStats->watched_count ?? 0),
         ];
     }
 
@@ -227,7 +227,7 @@ class ProfileService
         $trackingTable = (new UserShowTracking)->getTable();
         $recentWatches = $this->recentShowWatchesQuery($user);
 
-        return DB::table($trackingTable)
+        return array_values(DB::table($trackingTable)
             ->join($showTable, "{$showTable}.id", '=', "{$trackingTable}.show_id")
             ->leftJoinSub($recentWatches, 'recent_watches', fn ($join) => $join->on('recent_watches.show_id', '=', "{$showTable}.id"))
             ->where("{$trackingTable}.user_id", $user->id)
@@ -247,9 +247,9 @@ class ProfileService
             ->map(fn (object $row): array => [
                 'id' => (int) $row->id,
                 'title' => (string) $row->title,
-                'poster_url' => $row->poster_url,
+                'poster_url' => is_string($row->poster_url) ? $row->poster_url : null,
             ])
-            ->all();
+            ->all());
     }
 
     /**
@@ -260,7 +260,7 @@ class ProfileService
         $movieTable = (new Movie)->getTable();
         $trackingTable = (new UserMovieTracking)->getTable();
 
-        return DB::table($trackingTable)
+        return array_values(DB::table($trackingTable)
             ->join($movieTable, "{$movieTable}.id", '=', "{$trackingTable}.movie_id")
             ->where("{$trackingTable}.user_id", $user->id)
             ->select([
@@ -269,7 +269,7 @@ class ProfileService
                 "{$movieTable}.title",
                 "{$movieTable}.poster_image_url as poster_url",
             ])
-            ->orderByRaw("CASE WHEN {$trackingTable}.watch_count > 0 THEN 0 ELSE 1 END")
+            ->orderByRaw('CASE WHEN watch_count > 0 THEN 0 ELSE 1 END')
             ->orderByDesc("{$trackingTable}.watched_date")
             ->orderByDesc("{$trackingTable}.updated_at")
             ->orderByDesc("{$trackingTable}.id")
@@ -278,9 +278,9 @@ class ProfileService
             ->map(fn (object $row): array => [
                 'id' => (int) $row->id,
                 'title' => (string) $row->title,
-                'poster_url' => $row->poster_url,
+                'poster_url' => is_string($row->poster_url) ? $row->poster_url : null,
             ])
-            ->all();
+            ->all());
     }
 
     private function recentShowWatchesQuery(User $user): Builder
@@ -288,14 +288,14 @@ class ProfileService
         $episodeTable = (new Episode)->getTable();
         $watchTable = (new UserEpisodeWatch)->getTable();
 
-        return DB::table($watchTable)
-            ->join($episodeTable, "{$episodeTable}.id", '=', "{$watchTable}.episode_id")
-            ->select("{$episodeTable}.show_id")
-            ->selectRaw("MAX({$watchTable}.watched_date) AS last_watched_at")
-            ->selectRaw("MAX({$watchTable}.id) AS last_watch_id")
-            ->where("{$watchTable}.user_id", $user->id)
-            ->where("{$watchTable}.watch_count", '>', 0)
-            ->groupBy("{$episodeTable}.show_id");
+        return DB::table("{$watchTable} as episode_watches")
+            ->join("{$episodeTable} as episodes", 'episodes.id', '=', 'episode_watches.episode_id')
+            ->select('episodes.show_id')
+            ->selectRaw('MAX(episode_watches.watched_date) AS last_watched_at')
+            ->selectRaw('MAX(episode_watches.id) AS last_watch_id')
+            ->where('episode_watches.user_id', $user->id)
+            ->where('episode_watches.watch_count', '>', 0)
+            ->groupBy('episodes.show_id');
     }
 
     private function showGroupKey(string $status, int $watched, int $aired): string

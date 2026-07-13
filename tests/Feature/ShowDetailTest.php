@@ -28,6 +28,7 @@ it('returns the show with its seasons, episodes and TMDB link as JSON', function
 
     $this->actingAs($user)->getJson(route('shows.show', $show))
         ->assertOk()
+        ->assertJsonPath('today', $user->localToday()->toDateString())
         ->assertJsonPath('show.id', $show->id)
         ->assertJsonPath('show.title', $show->title)
         ->assertJsonPath('show.season_count', 2)

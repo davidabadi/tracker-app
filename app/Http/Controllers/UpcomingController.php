@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\ShowStatus;
 use App\Models\Episode;
 use App\Models\Movie;
 use Illuminate\Http\JsonResponse;
@@ -52,7 +53,8 @@ class UpcomingController extends Controller
             // Specials (season 0) are not part of a show's tracked run.
             ->where('season_number', '>', 0)
             ->whereHas('show.trackings', function ($query) use ($user): void {
-                $query->where('user_id', $user->id);
+                $query->where('user_id', $user->id)
+                    ->where('status', ShowStatus::Watching);
             })
             ->orderBy('air_date')
             ->orderBy('season_number')
@@ -98,7 +100,8 @@ class UpcomingController extends Controller
             // Specials (season 0) are not part of a show's tracked run.
             ->where('season_number', '>', 0)
             ->whereHas('show.trackings', function ($query) use ($user): void {
-                $query->where('user_id', $user->id);
+                $query->where('user_id', $user->id)
+                    ->where('status', ShowStatus::Watching);
             })
             // Backlog is unwatched by definition — an episode this user has
             // already marked watched drops out.

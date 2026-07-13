@@ -69,6 +69,8 @@ export function ShowWatchRow({
     overlay,
     className,
     swipe,
+    onWatchCount,
+    onWatchSuccess,
 }: {
     row: ShowWatchRowData;
     onOpenShow: () => void;
@@ -79,6 +81,8 @@ export function ShowWatchRow({
     overlay?: React.ReactNode;
     className?: string;
     swipe?: RowSwipe;
+    onWatchCount?: (count: number) => void;
+    onWatchSuccess?: (count: number) => void;
 }) {
     const showTitle = row.show_title ?? 'Unknown show';
     const episode = row.episode;
@@ -102,6 +106,8 @@ export function ShowWatchRow({
                 episodeId={episode.id}
                 initialCount={episode.watch_count}
                 label={`${showTitle} ${episodeCode(episode)}`}
+                onCount={onWatchCount}
+                onSuccess={onWatchSuccess}
             />
         );
     }

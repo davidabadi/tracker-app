@@ -205,6 +205,42 @@ it('preserves an existing rewatch count when bulk-marking a season watched', fun
     });
 });
 
+it('bulk-marks only episodes that have aired in the user timezone', function () {
+    $user = User::factory()->create(['timezone' => 'America/New_York']);
+    $show = Show::factory()->create();
+    $aired = Episode::factory()->create([
+        'show_id' => $show->id,
+        'season_number' => 1,
+        'episode_number' => 1,
+        'air_date' => today(),
+    ]);
+    $future = Episode::factory()->create([
+        'show_id' => $show->id,
+        'season_number' => 1,
+        'episode_number' => 2,
+        'air_date' => today()->addWeek(),
+    ]);
+    $undated = Episode::factory()->create([
+        'show_id' => $show->id,
+        'season_number' => 1,
+        'episode_number' => 3,
+        'air_date' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->patchJson(route('track.shows.seasons.watched', ['show' => $show->id, 'season' => 1]), ['watched' => true])
+        ->assertOk()
+        ->assertJsonPath('episodes_affected', 1);
+
+    $this->assertDatabaseHas('user_episode_watches', [
+        'user_id' => $user->id,
+        'episode_id' => $aired->id,
+        'watched' => true,
+    ]);
+    $this->assertDatabaseMissing('user_episode_watches', ['user_id' => $user->id, 'episode_id' => $future->id]);
+    $this->assertDatabaseMissing('user_episode_watches', ['user_id' => $user->id, 'episode_id' => $undated->id]);
+});
+
 it('bulk-unmarks a whole season watched=false, clearing watched_date', function () {
     $user = User::factory()->create();
     [$show, $season1] = makeShowWithEpisodes();

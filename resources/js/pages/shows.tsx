@@ -506,6 +506,7 @@ export default function Shows({
                     scrollRef={scrollRef}
                     onOpenShow={openShow}
                     onOpenEpisode={setEpisodeModalId}
+                    onEpisodeUnwatched={() => reloadList()}
                 />
 
                 {/* Watch Next / Haven't Started / Watch Later fill at least the

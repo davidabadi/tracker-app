@@ -31,12 +31,14 @@ export function MultiWatchSheet({
     count,
     label,
     onAction,
+    elevated = false,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     count: number;
     label: string;
     onAction: (action: WatchAction) => void;
+    elevated?: boolean;
 }) {
     const options: Option[] = [
         { action: 'increment', label: 'Mark watched again', icon: Eye },
@@ -61,7 +63,11 @@ export function MultiWatchSheet({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 showCloseButton={false}
-                className="gap-0 overflow-hidden p-0 sm:max-w-sm"
+                overlayClassName={elevated ? 'z-[70]' : undefined}
+                className={cn(
+                    'gap-0 overflow-hidden p-0 sm:max-w-sm',
+                    elevated && 'z-[70]',
+                )}
             >
                 <DialogHeader className="px-5 pt-5 pb-4 text-left">
                     <DialogTitle className="truncate">{label}</DialogTitle>

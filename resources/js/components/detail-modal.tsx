@@ -26,14 +26,22 @@ export function DetailModal({
 }) {
     useEffect(() => {
         function handleKeydown(event: KeyboardEvent) {
-            if (event.key === 'Escape' && !escapeDisabled) {
+            if (event.key !== 'Escape' || escapeDisabled) {
+                return;
+            }
+
+            const nestedDialogOpen = document.querySelector(
+                '[data-slot="dialog-content"][data-state="open"]',
+            );
+
+            if (!nestedDialogOpen) {
                 onClose();
             }
         }
 
-        window.addEventListener('keydown', handleKeydown);
+        window.addEventListener('keydown', handleKeydown, true);
 
-        return () => window.removeEventListener('keydown', handleKeydown);
+        return () => window.removeEventListener('keydown', handleKeydown, true);
     }, [onClose, escapeDisabled]);
 
     return (

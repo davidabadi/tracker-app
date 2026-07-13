@@ -136,7 +136,11 @@ class EpisodeWatchController extends Controller
         $this->ensureShowTracked($request, $show->id);
 
         $watched = $request->watched();
-        $episodeIds = $show->episodes()->where('season_number', $season)->pluck('id');
+        $episodeIds = $show->episodes()
+            ->where('season_number', $season)
+            ->whereNotNull('air_date')
+            ->whereDate('air_date', '<=', $request->user()->localToday())
+            ->pluck('id');
 
         // Marking a season watched must not wipe out per-episode rewatch counts:
         // episodes already watched (count > 0) keep their count and date, and only

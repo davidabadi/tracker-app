@@ -45,8 +45,12 @@ export const WatchedHistory = forwardRef<
         scrollRef: React.RefObject<HTMLDivElement | null>;
         onOpenShow: (row: ShowWatchRowData) => void;
         onOpenEpisode: (episodeId: number) => void;
+        onEpisodeUnwatched: () => void;
     }
->(function WatchedHistory({ scrollRef, onOpenShow, onOpenEpisode }, ref) {
+>(function WatchedHistory(
+    { scrollRef, onOpenShow, onOpenEpisode, onEpisodeUnwatched },
+    ref,
+) {
     const [rows, setRows] = useState<ShowWatchRowData[]>([]);
     const [loading, setLoading] = useState(false);
 
@@ -212,6 +216,50 @@ export const WatchedHistory = forwardRef<
                         row={row}
                         onOpenShow={() => onOpenShow(row)}
                         onOpenEpisode={onOpenEpisode}
+                        onWatchCount={(count) => {
+                            const episodeId = row.episode?.id;
+
+                            if (episodeId === undefined) {
+                                return;
+                            }
+
+                            setRows((current) => {
+                                const updatedRow = {
+                                    ...row,
+                                    episode: row.episode
+                                        ? { ...row.episode, watch_count: count }
+                                        : null,
+                                };
+                                const existingIndex = current.findIndex(
+                                    (item) => item.episode?.id === episodeId,
+                                );
+
+                                if (existingIndex === -1) {
+                                    return [...current, updatedRow];
+                                }
+
+                                return current.map((item, index) =>
+                                    index === existingIndex ? updatedRow : item,
+                                );
+                            });
+                        }}
+                        onWatchSuccess={(count) => {
+                            if (count === 0) {
+                                const episodeId = row.episode?.id;
+
+                                if (episodeId === undefined) {
+                                    return;
+                                }
+
+                                setRows((current) =>
+                                    current.filter(
+                                        (item) =>
+                                            item.episode?.id !== episodeId,
+                                    ),
+                                );
+                                onEpisodeUnwatched();
+                            }
+                        }}
                     />
                 ))}
             </ul>

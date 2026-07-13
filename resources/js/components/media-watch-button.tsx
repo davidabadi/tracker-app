@@ -17,12 +17,14 @@ function MediaWatchButton({
     initialCount,
     label,
     onCount,
+    onSuccess,
     className,
 }: {
     url: string;
     initialCount: number;
     label: string;
     onCount?: (count: number) => void;
+    onSuccess?: (count: number) => void;
     className?: string;
 }) {
     const [count, setCount] = useState(initialCount);
@@ -41,6 +43,7 @@ function MediaWatchButton({
 
         transform(() => ({ action }));
         patch(url, {
+            onSuccess: () => onSuccess?.(next),
             onError: () => {
                 setCount(previous);
                 onCount?.(previous);
@@ -64,11 +67,15 @@ export function EpisodeWatchButton({
     episodeId,
     initialCount,
     label,
+    onCount,
+    onSuccess,
     className,
 }: {
     episodeId: number;
     initialCount: number;
     label: string;
+    onCount?: (count: number) => void;
+    onSuccess?: (count: number) => void;
     className?: string;
 }) {
     return (
@@ -76,6 +83,8 @@ export function EpisodeWatchButton({
             url={toggleEpisode.url(episodeId)}
             initialCount={initialCount}
             label={label}
+            onCount={onCount}
+            onSuccess={onSuccess}
             className={className}
         />
     );

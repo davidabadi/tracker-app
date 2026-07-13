@@ -16,12 +16,14 @@ export function MediaWatchControl({
     onAction,
     disabled = false,
     className,
+    elevated = false,
 }: {
     count: number;
     label: string;
     onAction: (action: WatchAction) => void;
     disabled?: boolean;
     className?: string;
+    elevated?: boolean;
 }) {
     const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -53,6 +55,7 @@ export function MediaWatchControl({
                 onOpenChange={setSheetOpen}
                 count={count}
                 label={label}
+                elevated={elevated}
                 onAction={(action) => {
                     setSheetOpen(false);
                     onAction(action);

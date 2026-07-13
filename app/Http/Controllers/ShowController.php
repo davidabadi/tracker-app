@@ -61,6 +61,7 @@ class ShowController extends Controller
             ]);
 
         return response()->json([
+            'today' => $user->localToday()->toDateString(),
             'show' => [
                 'id' => $show->id,
                 'title' => $show->title,

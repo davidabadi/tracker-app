@@ -136,8 +136,12 @@ function useRowSwipe(swipe: RowSwipe | undefined) {
     }
 
     function release() {
+        if (!drag.current) {
+            return;
+        }
+
         const committed = offset.current;
-        const width = drag.current?.width ?? gestureWidth;
+        const width = drag.current.width;
         const commitThreshold = width * COMMIT_THRESHOLD_RATIO;
         const progress = Math.min(1, Math.abs(committed) / width);
 

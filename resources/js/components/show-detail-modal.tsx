@@ -11,6 +11,7 @@ import {
     store as storeShowTracking,
 } from '@/actions/App/Http/Controllers/ShowTrackingController';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { Countdown } from '@/components/countdown';
 import { DetailModal, DetailModalSkeleton } from '@/components/detail-modal';
 import { EpisodeQuickView, episodeCode } from '@/components/episode-quick-view';
 import type { QuickViewEpisode } from '@/components/episode-quick-view';
@@ -32,6 +33,7 @@ import {
 import { WatchedCircle } from '@/components/watched-circle';
 import { nextWatchCount } from '@/components/watched-toggle';
 import type { WatchAction } from '@/components/watched-toggle';
+import { daysBetween, parseDateString } from '@/lib/dates';
 import { cn } from '@/lib/utils';
 import { open as openShow } from '@/routes/search/shows';
 import { show as showDetail } from '@/routes/shows';
@@ -48,6 +50,7 @@ type SeasonItem = {
 };
 
 type ShowDetailPayload = {
+    today: string;
     show: {
         id: number;
         title: string;
@@ -73,6 +76,23 @@ function localToday(): string {
     return `${now.getFullYear()}-${month}-${day}`;
 }
 
+function daysUntilAirDate(episode: EpisodeItem, today: string): number | null {
+    if (episode.air_date === null) {
+        return null;
+    }
+
+    return daysBetween(
+        parseDateString(today),
+        parseDateString(episode.air_date),
+    );
+}
+
+function hasAired(episode: EpisodeItem, today: string): boolean {
+    const daysUntil = daysUntilAirDate(episode, today);
+
+    return daysUntil !== null && daysUntil <= 0;
+}
+
 /**
  * Multi-watch control wired to the single-episode action endpoint, with the
  * count lifted to the modal so season counters and the quick view stay in sync.
@@ -96,6 +116,7 @@ function EpisodeToggle({
             label={episodeCode(episode)}
             onAction={(action) => onAction(episode, action)}
             className={className}
+            elevated
         />
     );
 }
@@ -143,6 +164,7 @@ function SeasonCard({
     onRestore,
     onOpenEpisode,
     onEpisodeAction,
+    today,
 }: {
     showId: number;
     season: SeasonItem;
@@ -151,27 +173,33 @@ function SeasonCard({
     onRestore: (entries: Array<[number, WatchState]>) => void;
     onOpenEpisode: (episode: EpisodeItem) => void;
     onEpisodeAction: (episode: EpisodeItem, action: WatchAction) => void;
+    today: string;
 }) {
     const { patch, transform, processing } = useHttp({ watched: false });
 
+    const airedEpisodes = season.episodes.filter((episode) =>
+        hasAired(episode, today),
+    );
+    const airedTotal = airedEpisodes.length;
+    const airedWatchedCount = airedEpisodes.filter(
+        (episode) => (watchState[episode.id]?.count ?? 0) > 0,
+    ).length;
     const total = season.episodes.length;
     const watchedCount = season.episodes.filter(
         (episode) => (watchState[episode.id]?.count ?? 0) > 0,
     ).length;
-    const allWatched = total > 0 && watchedCount === total;
+    const allWatched = airedTotal > 0 && airedWatchedCount === airedTotal;
 
     function handleBulkToggle() {
-        if (processing || total === 0) {
+        if (processing || airedTotal === 0) {
             return;
         }
 
         const next = !allWatched;
-        const snapshot = season.episodes.map(
-            (episode): [number, WatchState] => [
-                episode.id,
-                watchState[episode.id] ?? { count: 0, date: null },
-            ],
-        );
+        const snapshot = airedEpisodes.map((episode): [number, WatchState] => [
+            episode.id,
+            watchState[episode.id] ?? { count: 0, date: null },
+        ]);
 
         onSetSeason(season.season_number, next);
 
@@ -203,11 +231,13 @@ function SeasonCard({
                             {watchedCount}/{total}
                         </span>
                     </CollapsibleTrigger>
-                    <WatchedCircle
-                        watched={allWatched}
-                        onToggle={handleBulkToggle}
-                        label={`all of season ${season.season_number}`}
-                    />
+                    {airedTotal > 0 && (
+                        <WatchedCircle
+                            watched={allWatched}
+                            onToggle={handleBulkToggle}
+                            label={`all aired episodes of season ${season.season_number}`}
+                        />
+                    )}
                 </div>
                 <CollapsibleContent>
                     <ul className="space-y-px pb-1">
@@ -234,11 +264,27 @@ function SeasonCard({
                                         </span>
                                     </span>
                                 </button>
-                                <EpisodeToggle
-                                    episode={episode}
-                                    count={watchState[episode.id]?.count ?? 0}
-                                    onAction={onEpisodeAction}
-                                />
+                                {hasAired(episode, today) ? (
+                                    <EpisodeToggle
+                                        episode={episode}
+                                        count={
+                                            watchState[episode.id]?.count ?? 0
+                                        }
+                                        onAction={onEpisodeAction}
+                                    />
+                                ) : daysUntilAirDate(episode, today) !==
+                                  null ? (
+                                    <Countdown
+                                        daysUntil={
+                                            daysUntilAirDate(episode, today) ??
+                                            0
+                                        }
+                                    />
+                                ) : (
+                                    <span className="shrink-0 text-xs font-semibold text-muted-foreground uppercase">
+                                        TBA
+                                    </span>
+                                )}
                             </li>
                         ))}
                     </ul>
@@ -331,7 +377,9 @@ export function ShowDetailModal({
     // episodes are ticked off.
     const nextUnwatched =
         episodesInOrder.find(
-            (episode) => (watchState[episode.id]?.count ?? 0) === 0,
+            (episode) =>
+                hasAired(episode, data?.today ?? localToday()) &&
+                (watchState[episode.id]?.count ?? 0) === 0,
         ) ?? null;
 
     function markDirty() {
@@ -369,24 +417,28 @@ export function ShowDetailModal({
         setWatchState((previous) => ({
             ...previous,
             ...Object.fromEntries(
-                season.episodes.map((episode) => {
-                    // Marking watched keeps any existing rewatch count (matching
-                    // the backend), so a bulk toggle never wipes a "×3".
-                    const existing = previous[episode.id]?.count ?? 0;
-                    const count = watched ? Math.max(existing, 1) : 0;
+                season.episodes
+                    .filter((episode) =>
+                        hasAired(episode, data?.today ?? localToday()),
+                    )
+                    .map((episode) => {
+                        // Marking watched keeps any existing rewatch count (matching
+                        // the backend), so a bulk toggle never wipes a "×3".
+                        const existing = previous[episode.id]?.count ?? 0;
+                        const count = watched ? Math.max(existing, 1) : 0;
 
-                    return [
-                        episode.id,
-                        {
-                            count,
-                            date:
-                                count > 0
-                                    ? (previous[episode.id]?.date ??
-                                      localToday())
-                                    : null,
-                        },
-                    ];
-                }),
+                        return [
+                            episode.id,
+                            {
+                                count,
+                                date:
+                                    count > 0
+                                        ? (previous[episode.id]?.date ??
+                                          localToday())
+                                        : null,
+                            },
+                        ];
+                    }),
             ),
         }));
     }
@@ -579,6 +631,9 @@ export function ShowDetailModal({
     const quickViewWatch = quickViewEpisode
         ? (watchState[quickViewEpisode.id] ?? { count: 0, date: null })
         : { count: 0, date: null };
+    const quickViewDaysUntil = quickViewEpisode
+        ? daysUntilAirDate(quickViewEpisode, data?.today ?? localToday())
+        : null;
 
     const innerDialogOpen =
         quickViewEpisode !== null || pendingWatch !== null || confirmingUntrack;
@@ -759,6 +814,7 @@ export function ShowDetailModal({
                                                         onEpisodeAction={
                                                             applyEpisodeAction
                                                         }
+                                                        today={data.today}
                                                     />
                                                 ))}
                                             </div>
@@ -777,6 +833,7 @@ export function ShowDetailModal({
                 description="This removes the show from your list and marks every episode as not watched."
                 confirmLabel="Untrack"
                 destructive
+                elevated
                 onConfirm={handleUntrackConfirmed}
                 onOpenChange={setConfirmingUntrack}
             />
@@ -790,7 +847,11 @@ export function ShowDetailModal({
                 }}
             >
                 {pendingWatch && (
-                    <DialogContent className="max-w-sm" showCloseButton={false}>
+                    <DialogContent
+                        className="z-[70] max-w-sm"
+                        overlayClassName="z-[70]"
+                        showCloseButton={false}
+                    >
                         <DialogHeader className="text-left">
                             <DialogTitle>
                                 Catch up to {episodeCode(pendingWatch)}?
@@ -825,13 +886,21 @@ export function ShowDetailModal({
                 watchCount={quickViewWatch.count}
                 watchedDate={quickViewWatch.date}
                 toggle={
-                    quickViewEpisode && (
+                    quickViewEpisode && quickViewDaysUntil === null ? (
+                        <span className="text-xs font-semibold text-muted-foreground uppercase">
+                            TBA
+                        </span>
+                    ) : quickViewEpisode &&
+                      quickViewDaysUntil !== null &&
+                      quickViewDaysUntil > 0 ? (
+                        <Countdown daysUntil={quickViewDaysUntil} />
+                    ) : quickViewEpisode ? (
                         <EpisodeToggle
                             episode={quickViewEpisode}
                             count={quickViewWatch.count}
                             onAction={applyEpisodeAction}
                         />
-                    )
+                    ) : null
                 }
                 hasPrevious={quickViewIndex > 0}
                 hasNext={
@@ -841,6 +910,7 @@ export function ShowDetailModal({
                 onNavigate={navigateQuickView}
                 position={quickViewIndex === -1 ? null : quickViewIndex}
                 total={episodesInOrder.length}
+                elevated
             />
         </>
     );

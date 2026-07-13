@@ -57,6 +57,7 @@ export function EpisodeQuickView({
     onNavigate,
     position = null,
     total = null,
+    elevated = false,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -71,6 +72,7 @@ export function EpisodeQuickView({
     onNavigate: (direction: 'previous' | 'next') => void;
     position?: number | null;
     total?: number | null;
+    elevated?: boolean;
 }) {
     const touchStartX = useRef<number | null>(null);
     // Remembered so the incoming episode slides in from the side you were
@@ -132,7 +134,8 @@ export function EpisodeQuickView({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                className="max-w-md"
+                overlayClassName={elevated ? 'z-[70]' : undefined}
+                className={cn('max-w-md', elevated && 'z-[70]')}
                 showCloseButton={false}
                 onInteractOutside={(event) => event.preventDefault()}
                 onTouchStart={handleTouchStart}

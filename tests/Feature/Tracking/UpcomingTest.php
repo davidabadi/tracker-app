@@ -128,6 +128,53 @@ it('excludes episodes from shows the user does not track', function () {
         );
 });
 
+it('only includes episodes from shows marked as watching', function () {
+    $user = User::factory()->create();
+    $watchingShow = Show::factory()->create();
+    $watchLaterShow = Show::factory()->create();
+    $finishedShow = Show::factory()->create();
+
+    $user->showTrackings()->create(['show_id' => $watchingShow->id, 'status' => ShowStatus::Watching]);
+    $user->showTrackings()->create(['show_id' => $watchLaterShow->id, 'status' => ShowStatus::WatchLater]);
+    $user->showTrackings()->create(['show_id' => $finishedShow->id, 'status' => ShowStatus::Finished]);
+
+    $watchingFuture = Episode::factory()->create([
+        'show_id' => $watchingShow->id,
+        'episode_number' => 1,
+        'air_date' => today()->addWeek(),
+    ]);
+    $watchingBacklog = Episode::factory()->create([
+        'show_id' => $watchingShow->id,
+        'episode_number' => 2,
+        'air_date' => today()->subWeek(),
+    ]);
+
+    foreach ([$watchLaterShow, $finishedShow] as $show) {
+        Episode::factory()->create([
+            'show_id' => $show->id,
+            'episode_number' => 1,
+            'air_date' => today()->addWeek(),
+        ]);
+        Episode::factory()->create([
+            'show_id' => $show->id,
+            'episode_number' => 2,
+            'air_date' => today()->subWeek(),
+        ]);
+    }
+
+    $this->actingAs($user)->get(route('shows.upcoming'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $inertia) => $inertia
+            ->has('episodes', 1)
+            ->where('episodes.0.id', $watchingFuture->id)
+        );
+
+    $this->actingAs($user)->getJson(route('shows.upcoming.backlog'))
+        ->assertOk()
+        ->assertJsonCount(1, 'rows')
+        ->assertJsonPath('rows.0.id', $watchingBacklog->id);
+});
+
 it('isolates upcoming episodes per user — one member never sees another\'s tracked show', function () {
     $owner = User::factory()->create();
     $intruder = User::factory()->create();
