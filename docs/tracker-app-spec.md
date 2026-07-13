@@ -14,18 +14,18 @@ Track watched/watching status for TV shows and movies per household member, surf
 
 ## 2. Tech Stack
 
-- **Single Laravel project** using the official Laravel React starter kit (Laravel 12+, Inertia.js, React 19, TypeScript, Tailwind, shadcn/ui). No separate backend/frontend split, no separate REST API — Laravel controllers return Inertia responses (page component + props), React renders them client-side after the first load. Frontend code lives in `resources/js/`.
+- **Single Laravel project** using the official Laravel React starter kit (Laravel 13, PHP 8.5, Inertia.js v3, React 19, TypeScript, Tailwind v4, shadcn/ui). No separate backend/frontend split, no separate REST API — Laravel controllers return Inertia responses (page component + props), React renders them client-side after the first load. Frontend code lives in `resources/js/`.
 - **Auth:** standard Laravel session-based auth (the `web` guard), which is what the starter kit ships with — no Sanctum needed, since Inertia pages and the backend share the same origin by definition. Configure a long session lifetime (see Section 8 — PWA installs shouldn't need to log in repeatedly). The starter kit includes a self-registration flow by default; **that gets removed/disabled** since accounts are created manually (Section 4/10).
 - **DB:** PostgreSQL, its own container with a named volume.
 - **Queue/Scheduler:** Laravel's built-in scheduler (cron-driven) for the nightly TMDB sync job; `database` queue driver (no Redis needed at this scale).
 - **PWA layer:** `vite-plugin-pwa` (Workbox) added on top of the starter kit's existing Vite config, handling manifest.json + service worker + install prompts. Offline caching targets Inertia page-visit responses and poster/still images, not a separate REST API.
 - **Exposure:** No tunnel container in this stack — you already run `cloudflared` on your Unraid server. This compose file just needs to expose the `web` service on the Docker network (or a fixed host port) so your existing tunnel config can point a route at it. Since your tunnel already terminates HTTPS, the app gets real HTTPS end-to-end, which service workers require.
 - **Containers (docker-compose):**
-  - `app` — PHP-FPM running the Laravel/Inertia app
-  - `web` — nginx, serves the app (Laravel routes + built Vite assets), reachable by your existing `cloudflared` container
-  - `db` — Postgres, named volume for data
-  - `scheduler` — same app image, runs `php artisan schedule:work`
-  - `queue` — same app image, runs `php artisan queue:work`
+    - `app` — PHP-FPM running the Laravel/Inertia app
+    - `web` — nginx, serves the app (Laravel routes + built Vite assets), reachable by your existing `cloudflared` container
+    - `db` — Postgres, named volume for data
+    - `scheduler` — same app image, runs `php artisan schedule:work`
+    - `queue` — same app image, runs `php artisan queue:work`
 
 ---
 
@@ -41,39 +41,53 @@ Track watched/watching status for TV shows and movies per household member, surf
 
 Show/Season/Episode/Movie are **shared metadata** — one row per title regardless of who's tracking it, so the household never fetches or stores the same TMDB data twice. Watched status and list membership are **per-user**, split into their own tracking tables.
 
+> This section reflects the **current schema as migrated** (see `database/migrations/`). Columns added after the original v2 spec are marked _(added)_.
+
 **User**
 
-- `id`, `name`, `email`, `password_hash`
+- `id`, `name`, `email`, `password` (hashed), `timezone` _(added — nullable IANA tz, browser-detected; drives the calendar-day cutoff for Upcoming/Watch List, falls back to app UTC)_
+- Fortify auth columns: `email_verified_at`, `two_factor_secret`, `two_factor_recovery_codes`, `two_factor_confirmed_at`, `remember_token`
+- Passkeys live in their own `passkeys` table.
 
 **Show** (shared)
 
-- `id`, `title`, `poster_image_url`, `overview`
-- has many `media_external_ids`
+- `id`, `title`, `poster_image_url`, `overview`, `ended` _(added — bool; TMDB reports the show concluded. Drives auto-finishing a user's tracking once they've watched everything; refreshed nightly since concluded shows can be revived)_
+- has many `media_external_ids`, `seasons`, `episodes`
 
 **Season** (shared)
 
 - `id`, `show_id`, `season_number`, `episode_count` (cached from TMDB)
+- Unique on `(show_id, season_number)`
 
 **Episode** (shared)
 
 - `id`, `show_id`, `season_number`, `episode_number`, `title`, `still_image_url`, `overview`, `air_date`, `runtime_minutes`
+- Unique on `(show_id, season_number, episode_number)`; `air_date` indexed for the Upcoming query
 
 **Movie** (shared)
 
-- `id`, `title`, `poster_image_url`, `overview`, `release_date`, `runtime_minutes`
-- has many `media_external_ids`
+- `id`, `title`, `poster_image_url`, `overview`, `release_date`, `runtime_minutes`, `tmdb_collection_id` _(added — nullable; the TMDB collection/"franchise" the movie belongs to, e.g. the Star Wars Collection. The collection's member list is fetched read-through from TMDB when a movie detail opens)_
+- has many `media_external_ids`; `release_date` indexed for the Upcoming query
 
-**UserShowTracking** (per-user)
+**MediaExternalId** (shared lookup)
 
-- `id`, `user_id`, `show_id`, `status`: enum `watching | watch_later | finished | stopped`
+- `id`, `media_type` (`show | movie`), `media_id`, `provider` (`tmdb | trakt | ...`), `external_id`
+- Polymorphic via `(media_type, media_id)` — no DB-level FK. Unique on `(provider, media_type, external_id)`.
 
-**UserEpisodeWatch** (per-user)
+**UserShowTracking** (per-user) — table `user_show_tracking`
 
-- `id`, `user_id`, `episode_id`, `watched` (bool), `watched_date` (nullable, auto-set on toggle, editable)
+- `id`, `user_id`, `show_id`, `status`: enum `watching | watch_later | finished | stopped` (see `App\Enums\ShowStatus`)
+- Unique on `(user_id, show_id)`. Status transitions are largely **automatic** — see §9.
 
-**UserMovieTracking** (per-user)
+**UserEpisodeWatch** (per-user) — table `user_episode_watches`
 
-- `id`, `user_id`, `movie_id`, `watched` (bool), `watched_date` (nullable, auto-set on toggle, editable)
+- `id`, `user_id`, `episode_id`, `watched` (bool), `watch_count` _(added — unsigned int; rewatch-aware)_, `watched_date` (nullable, auto-set on toggle, editable)
+- Unique on `(user_id, episode_id)`. `watched` is a derived convenience column kept in sync as `watch_count > 0`.
+
+**UserMovieTracking** (per-user) — table `user_movie_tracking`
+
+- `id`, `user_id`, `movie_id`, `watched` (bool), `watch_count` _(added)_, `watched_date` (nullable, auto-set on toggle, editable)
+- Unique on `(user_id, movie_id)`. Same `watched = watch_count > 0` derivation as episodes.
 
 ---
 
@@ -84,8 +98,8 @@ Bottom nav (mobile): **Shows | Movies | Search | Profile**. All watched-status a
 ### Shows tab
 
 - **Watch List** sub-tab, two view modes toggled by an icon:
-  - _List view_: sections — **Watch Next** (shows with an unwatched episode ready, for this user), **Watched History** (this user's recent watched log), **Watch Later** (shows this user is behind on). Each row: poster thumb, show name (tappable → detail), `S##|E##`, episode title, badge (`NEW`/`PREMIERE` if applicable), watched-toggle circle.
-  - _Grid view_: poster grid grouped by this user's `status` on `UserShowTracking` — Watching / Watch Later / Finished / Stopped — with a thin colored bar under each poster.
+    - _List view_: sections — **Watch Next** (shows with an unwatched episode ready, for this user), **Watched History** (this user's recent watched log), **Watch Later** (shows this user is behind on). Each row: poster thumb, show name (tappable → detail), `S##|E##`, episode title, badge (`NEW`/`PREMIERE` if applicable), watched-toggle circle.
+    - _Grid view_: poster grid grouped by this user's `status` on `UserShowTracking` — Watching / Watch Later / Finished / Stopped — with a thin colored bar under each poster.
 - **Upcoming** sub-tab: episodes from shows this user tracks with future `air_date`, grouped by date (or "X days" for far-future), watched-toggle per row.
 
 ### Movies tab
@@ -143,29 +157,64 @@ Rows with `source=tmdb` map directly into `media_external_ids` — the importer 
 
 ## 9. Interaction Behaviors
 
-- Tap watched-toggle circle → toggle watched for the logged-in user (white/unwatched ↔ green/watched).
+- Tap watched-toggle circle → change watched state for the logged-in user (white/unwatched ↔ green/watched). Watched state is a **count**, not a bare boolean (`watch_count`), so a tap resolves to one of three intents (`App\Enums\WatchAction`): **Increment** (0→1 first watch, or a rewatch bump), **SetOnce** (collapse a multi-watch count back to exactly one), **Reset** (count→0, not watched). `watched_date` reflects the most recent watch.
 - Tap show/movie name pill → navigate to detail page.
 - Tap season header's checkmark → mark/unmark entire season watched for this user.
+- "Catch me up" / watch-through → mark an episode and every earlier one watched in one action.
 - Grid/List icon → switch Watch List display mode.
-- **Phase 2 (flagged for later, define screen-by-screen with Claude Code as you go):** swipe left/right on an episode row in Watch Next/Upcoming lists toggles watched, same effect as tapping the circle.
+- **Left-swipe on a Watch List show row** reveals a menu: move to Watch Later / Stop Watching (status change), or Remove (drops the tracking row but **preserves** episode watches) vs. Untrack (also resets all episode watches). Swipe-to-toggle-watched on episode rows remains a candidate refinement.
+
+### Automatic show-status transitions (`App\Services\Library\TrackingStatusService`)
+
+The household never has to manage a status dropdown by hand:
+
+- Marking an episode watched on a **Watch Later** or **Stopped** show moves it to **Watching** (engagement implies active watching).
+- Once a user has watched every regular episode (specials / season 0 excluded) of a show TMDB reports as concluded (`shows.ended`), their tracking flips to **Finished** — either at toggle time or during the nightly refresh (covers the "finale watched before TMDB marked it Ended" case).
+- Finished is only ever _derived_, never forced: a revived show (new episodes, `ended` flips back to false) simply stops qualifying, and the nightly sync keeps `ended` fresh for exactly that reason.
+
+### Timezone-correct calendar days
+
+`air_date` / `release_date` are stored as timezone-less dates. "Today" for a user's Upcoming feed and Watch List is `User::localToday()` — UTC midnight of the user's local date in their detected `timezone` — so an evening in the US (already past midnight UTC) doesn't make tomorrow's episodes read as "Today". The browser silently PATCHes the detected timezone to `settings/timezone`.
+
+### On-demand history/backlog paging
+
+Watched History (Shows Watch List) and the aired-but-unwatched backlog (Shows Upcoming) are **not** in their page's initial payload — they are cursor-paginated JSON fetched as the user scrolls up, keeping first paint light.
 
 ---
 
-## 10. Suggested Build Order (for Claude Code)
+## 10. Implementation Checklist
 
-1. Scaffold the Laravel project using the official React starter kit (Inertia), + docker-compose skeleton (app, web, db/Postgres, boots and health-checks)
-2. Migrations: users, shows, seasons, episodes, movies, media_external_ids, user_show_tracking, user_episode_watches, user_movie_tracking
-3. Auth: strip the starter kit's self-registration route/page, configure a long-lived session, add an artisan command for manually creating household user accounts
-4. TMDB provider service behind a clean interface (search, fetch show/season/episode incl. runtime, fetch movie incl. runtime)
-5. Show/Movie tracking scoped to the logged-in user (add to list, set status) via Inertia form requests/controllers
-6. Episode watched-toggle + season bulk-toggle actions, scoped per user
-7. Scheduler job: nightly TMDB refresh → populates the Upcoming query
-8. `vite-plugin-pwa` added to the existing Vite config; nav shells for Shows/Movies/Search/Profile as Inertia pages in `resources/js/pages`
-9. Watch List screens (list + grid view toggle)
-10. Upcoming screens (Shows + Movies)
-11. Show/Movie detail pages + Episode Quick View
-12. Profile stats (watch time from runtime_minutes, episode count)
-13. Yamtrack CSV importer (once you have a real sample export)
-14. Expose `web` on the Docker network / a fixed port and point your existing `cloudflared` route at it
-15. Responsive/desktop layout pass, iterated as we go
-16. Swipe-to-mark-watched gesture (Phase 2)
+Status of the original build order plus features layered on since. Checked = shipped and covered by tests.
+
+### Core build
+
+- [x] Scaffold the Laravel React starter kit (Inertia) + docker-compose stack (`app`, `web`, `db`/Postgres, `scheduler`, `queue`) that boots and health-checks
+- [x] Migrations: users, shows, seasons, episodes, movies, media_external_ids, user_show_tracking, user_episode_watches, user_movie_tracking (+ later: `shows.ended`, `movies.tmdb_collection_id`, `watch_count`, `users.timezone`)
+- [x] Auth: self-registration stripped, long-lived session, `app:make-user` artisan command for creating household accounts
+- [x] TMDB provider service behind a clean interface (search, show/season/episode incl. runtime, movie incl. runtime, collections)
+- [x] Show/Movie tracking scoped to the logged-in user (add to list, set status) via Inertia form requests/controllers
+- [x] Episode watched-toggle + season bulk-toggle, scoped per user (+ "catch me up" watch-through)
+- [x] Scheduler job: nightly TMDB refresh (`tmdb:refresh`, daily 03:00) → feeds the Upcoming query
+- [x] `vite-plugin-pwa` added; nav shells for Shows / Movies / Search / Profile as Inertia pages
+- [x] Watch List screens (list + grid view toggle; Watch Next / Watched History / Watch Later)
+- [x] Upcoming screens (Shows + Movies), incl. aired-but-unwatched backlog
+- [x] Show/Movie detail pages + Episode Quick View
+- [x] Expose `web` on a fixed host port for the existing `cloudflared` route
+- [x] Responsive/desktop layout pass (iterated)
+
+### Beyond the original spec (shipped)
+
+- [x] Rewatch-aware watched state (`watch_count`, `WatchAction` increment/set-once/reset)
+- [x] Automatic show-status transitions (`TrackingStatusService`) + `shows.ended` auto-finish
+- [x] Per-user timezone detection and calendar-day correctness (`User::localToday()`)
+- [x] Movie TMDB collection (franchise) grouping
+- [x] Left-swipe Watch List actions (status move, remove-preserving-watches vs. untrack)
+- [x] 2FA (TOTP) + passkeys via Fortify
+
+### Not yet built
+
+- [ ] **Profile screen** — currently a placeholder (`resources/js/pages/profile.tsx` shows a "coming soon" card). Needs the real stats: total watch time (Σ `runtime_minutes` over this user's watched episodes + movies) and episodes-watched count.
+- [ ] **Consolidate settings into the app shell** — migrate the starter-kit settings / native Laravel pages (`settings/profile`, `settings/security`, `settings/appearance`, auth pages) into the TV-Time-style dashboard so they feel native to the tracker rather than bolted-on starter-kit screens.
+- [ ] **Yamtrack CSV importer** — per-user one-time import (§7). Map `source=tmdb` rows into `media_external_ids`, find-or-create the shared Show/Episode/Movie, then create per-user tracking rows for the importing user. Inspect a real export's headers before finalizing.
+- [ ] **Plex integration** — sync watched state from a Plex server (scrobble / library) as an additional per-user source; evaluate other providers (Jellyfin, Trakt, Emby) behind the same provider seam as TMDB.
+- [ ] Offline browsing of previously-viewed lists + queued offline watched-toggle writes (Phase 2 stretch, §8)
