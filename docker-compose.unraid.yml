@@ -21,6 +21,7 @@ services:
       start_period: 40s
     volumes:
       - '${DB_DUMP_PATH:?Set DB_DUMP_PATH in the ENV editor}:/backups/database'
+      - yamtrack_imports:/var/www/html/storage/app/private/yamtrack-imports
     networks:
       - tracker
 
@@ -74,9 +75,15 @@ services:
     depends_on:
       app:
         condition: service_healthy
+    volumes:
+      - yamtrack_imports:/var/www/html/storage/app/private/yamtrack-imports
     networks:
       - tracker
 
 networks:
   tracker:
     driver: bridge
+
+volumes:
+  yamtrack_imports:
+    driver: local
