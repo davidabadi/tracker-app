@@ -1,5 +1,7 @@
 <?php
 
+use App\Console\DatabaseDumpSchedule;
+use Illuminate\Console\Scheduling\Schedule as Scheduler;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -16,3 +18,5 @@ Artisan::command('inspire', function () {
 Schedule::command('tmdb:refresh')
     ->dailyAt('03:00')
     ->withoutOverlapping();
+
+app(DatabaseDumpSchedule::class)->register(app(Scheduler::class));

@@ -90,6 +90,49 @@ Point your existing `cloudflared` tunnel at the `web` service / host port; the
 tunnel terminates HTTPS, which service workers require. Set `APP_URL` to the
 public HTTPS URL in that case.
 
+## Database backups
+
+The `scheduler` container can create compressed PostgreSQL dumps on any standard
+five-part cron schedule. It must remain running for scheduled dumps to execute.
+Configure the feature in the Compose environment:
+
+```env
+DB_DUMP_ENABLED=true
+DB_DUMP_CRON="0 2 * * *"
+DB_DUMP_RETENTION_DAYS=7
+DB_DUMP_PATH=/mnt/user/backups/tracker-app
+```
+
+`DB_DUMP_ENABLED=false` disables the scheduled task. `DB_DUMP_CRON` is evaluated
+in the Laravel application timezone. An invalid value stops scheduler boot with
+a clear configuration error. After each successful dump,
+`DB_DUMP_RETENTION_DAYS` removes completed `.dump` files modified before the
+start of the current application day minus the configured number of days. It
+defaults to `7`; temporary and unrelated files are not removed. `DB_DUMP_PATH`
+is a host path; Compose bind-mounts it into `/backups/database` in both the
+`app` and `scheduler` containers. On Unraid, select a persistent share such as
+`/mnt/user/backups/tracker-app` and ensure the container can write to it.
+
+Run an immediate backup from the app container with:
+
+```bash
+docker compose exec app php artisan app:dump-database
+```
+
+Dumps use PostgreSQL's compressed custom format and are named
+`{database}-YYYY-MM-DD_HHMMSS.dump`, for example
+`tracker-2026-07-14_020000.dump`. Restore one with the PostgreSQL 17 client (the
+command prompts for the database password):
+
+```bash
+docker compose exec app pg_restore --host=db --port=5432 --username=tracker --dbname=tracker --clean --if-exists --no-owner /backups/database/tracker-2026-07-14_020000.dump
+```
+
+A database dump is a logical backup and is not the same as backing up
+PostgreSQL's live data directory. Keep `DB_DUMP_PATH` separate from
+`DB_DATA_LOCATION`, and include the selected Unraid backup share in your broader
+backup strategy.
+
 ## Running on Unraid with Compose Manager Plus
 
 This installation uses prebuilt images from GitHub Container Registry. It does

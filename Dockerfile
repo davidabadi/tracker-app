@@ -10,8 +10,11 @@ FROM php:8.5-fpm-bookworm AS base
 # install-php-extensions resolves system deps and installs prebuilt/optimized
 # PHP extensions reliably (more robust than compiling intl by hand).
 ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
+ADD --chmod=0644 https://www.postgresql.org/media/keys/ACCC4CF8.asc /usr/share/keyrings/postgresql.asc
 
-RUN apt-get update && apt-get install -y --no-install-recommends git unzip \
+RUN echo "deb [signed-by=/usr/share/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && apt-get install -y --no-install-recommends git unzip postgresql-client-17 \
     && install-php-extensions pdo_pgsql pgsql zip intl bcmath pcntl opcache \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
