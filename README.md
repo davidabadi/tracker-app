@@ -22,6 +22,8 @@ what's next).
   release countdowns, TMDB collection (franchise) grouping.
 - **Rewatch-aware:** watched state is a _count_, not just a boolean — rewatches
   bump the count and keep the most-recent watch date.
+- **Yamtrack import:** each user can add missing history or authoritatively
+  replace their own library from a real Yamtrack CSV export in the background.
 - **Automatic status:** watching an episode moves a show to _Watching_; finishing
   every episode of a concluded show flips it to _Finished_ — no manual dropdown.
 - **Timezone-correct calendar days:** the Upcoming/Watch List "today" cutoff uses
@@ -166,6 +168,9 @@ php artisan key:generate
 php artisan migrate
 composer run dev           # serves app + Vite + queue + logs
 ```
+
+Yamtrack imports require a running queue worker. `composer run dev` includes
+one; when running services separately, start `php artisan queue:work`.
 
 If a frontend change isn't showing up, you likely need `npm run dev` (or
 `npm run build`).

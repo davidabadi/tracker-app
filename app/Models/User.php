@@ -108,4 +108,10 @@ class User extends Authenticatable implements PasskeyUser
     {
         return $this->hasMany(UserEpisodeWatch::class);
     }
+
+    /** @return HasMany<YamtrackImport, $this> */
+    public function yamtrackImports(): HasMany
+    {
+        return $this->hasMany(YamtrackImport::class);
+    }
 }

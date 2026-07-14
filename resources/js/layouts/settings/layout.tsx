@@ -1,5 +1,11 @@
 import { Link } from '@inertiajs/react';
-import { ArrowLeft, Palette, ShieldCheck, UserRoundCog } from 'lucide-react';
+import {
+    ArrowLeft,
+    FileClock,
+    Palette,
+    ShieldCheck,
+    UserRoundCog,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import { PageScrollArea } from '@/components/page-scroll-area';
@@ -9,6 +15,7 @@ import { profile } from '@/routes';
 import { edit as editAppearance } from '@/routes/appearance';
 import { edit } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
+import { index as importHistory } from '@/routes/yamtrack-import';
 
 type SettingsNavItem = {
     title: string;
@@ -31,6 +38,11 @@ const settingsNavItems: SettingsNavItem[] = [
         title: 'Appearance',
         href: editAppearance(),
         icon: Palette,
+    },
+    {
+        title: 'Import history',
+        href: importHistory(),
+        icon: FileClock,
     },
 ];
 
@@ -61,7 +73,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
 
                 <div className="grid gap-6 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-8">
                     <nav
-                        className="grid grid-cols-3 gap-1 rounded-xl border border-border/60 bg-card/70 p-1 md:h-fit md:grid-cols-1 md:gap-1"
+                        className="grid grid-cols-2 gap-1 rounded-xl border border-border/60 bg-card/70 p-1 md:h-fit md:grid-cols-1 md:gap-1"
                         aria-label="Settings categories"
                     >
                         {settingsNavItems.map((item) => {

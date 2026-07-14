@@ -72,6 +72,21 @@ final class TrackingStatusService
             });
     }
 
+    /**
+     * Apply only the automatic completion rule after an authoritative import.
+     * The import's explicit TV status remains primary for Planning/Paused/
+     * Dropped rows; Completed is allowed to become Finished only when the same
+     * concluded-show, regular-episode rule used by interactive tracking passes.
+     */
+    public function finishImportedCompletion(User $user, Show $show): void
+    {
+        $tracking = $user->showTrackings()->where('show_id', $show->id)->first();
+
+        if ($tracking !== null && $show->ended && $this->hasWatchedEverything($user->id, $show)) {
+            $this->finish($tracking);
+        }
+    }
+
     private function finish(UserShowTracking $tracking): void
     {
         if ($tracking->status !== ShowStatus::Finished) {

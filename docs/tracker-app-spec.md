@@ -139,9 +139,22 @@ Bottom nav (mobile): **Shows | Movies | Search | Profile**. All watched-status a
 
 ## 7. Yamtrack Import
 
-Per-user, one-time import command/UI reading a Yamtrack CSV export, run while logged in as the user whose history it is. Known columns: `media_id`, `source` (tmdb/mal/mangaupdates/igdb/openlibrary/hardcover/comicvine/manual), `media_type` (tv/season/episode/movie/anime/manga/game/book/comic), `title` (optional, auto-fetched if blank), `image_url` (optional, auto-fetched if blank), `season_number`, `episode_number`, `score` (0–10).
+The authenticated settings page at `/settings/import` accepts the real Yamtrack CSV format:
 
-Rows with `source=tmdb` map directly into `media_external_ids` — the importer finds-or-creates the shared Show/Episode/Movie row, then creates the per-user tracking row against the importing user's `user_id`. **Action item:** once you have an actual export file in hand, have Claude Code inspect the real headers before writing the importer — worth confirming against a live sample rather than this doc alone.
+`media_id, source, media_type, title, image, season_number, episode_number, score, status, notes, start_date, end_date, progress, created_at, progressed_at`
+
+Initial support is deliberately TMDB-only and accepts `media_type=tv|season|episode|movie`. A TV, season, or episode `media_id` is the parent TMDB show ID; seasons add `season_number`, and episodes add `episode_number`. Movies use their TMDB movie ID. Stable matching always goes through `media_external_ids`, never a title or image. Each unique show/movie is resolved once per run through `MediaLibraryService`; existing metadata avoids an upstream request, while a new show fetch synchronizes its seasons and episodes before episode coordinates are matched.
+
+The importer offers exactly two strategies:
+
+- **Add missing history** is additive. It creates missing per-user tracking, imports episode rows and Completed movies as a minimum known watch count of one, preserves higher rewatch counts and useful newer dates, and never removes or resets app-only tracking or watches. Existing show statuses are not downgraded.
+- **Replace my Tracker history** treats the file as the importing user's authoritative snapshot. Shows/movies absent from the file are removed from that user's tracking, watched episodes absent from the episode row set are reset to zero, non-Completed movies are tracked but unwatched, and imported watches are exactly one. It can reduce rewatch counts. The operation never deletes shared metadata or touches another user. Parsing must succeed before the per-user replacement transaction starts; individual TMDB titles that cannot be resolved are skipped, named in the error summary, and produce `completed_with_errors` instead of aborting the remaining import.
+
+Yamtrack statuses map conservatively: In progress → Watching, Planning → Watch Later, and Paused/Dropped → Stopped. A TV row is primary when season statuses disagree; without a TV row, the first useful season status supplies context. Completed never forces Finished. Episode watches are applied first, then `TrackingStatusService` may finish only a concluded show whose regular episodes are all watched; specials/season 0 remain excluded from completion.
+
+Episode rows and Completed movie rows represent one known watch. `end_date` is the preferred imported watch timestamp with `progressed_at` as fallback; timezone-bearing timestamps are normalized to UTC for the existing timestamp columns. A missing or invalid optional timestamp remains null rather than inventing a watch time.
+
+Uploads are private, capped at 20 MB, header-validated before dispatch, and processed by the database queue. `YamtrackCsvReader` streams rows and chunked writes support production exports in the thousands (the reference export contained 7,297 rows). Progress, bounded row errors, safe failures, counters, and file hashes live in `yamtrack_imports`; raw CSV data does not. Temporary files are removed on success or terminal failure. Both strategies are idempotent, and the database prevents more than one pending/processing import per user.
 
 ---
 
@@ -215,6 +228,6 @@ Status of the original build order plus features layered on since. Checked = shi
 
 - [x] **Profile screen** — private, rewatch-aware TV/movie time and watch-count stats; recent media shelves; lazy full-screen show/movie libraries grouped by status with aired-episode progress; existing detail modals and account menu integrated.
 - [x] **Consolidate settings into the app shell** — Account, Security (password, TOTP/recovery codes, passkeys), and Appearance now use the tracker shell at the stable `settings/profile`, `settings/security`, and `settings/appearance` URLs; the Profile kebab menu launches each category, and the legacy starter-kit dashboard/layout is gone.
-- [ ] **Yamtrack CSV importer** — per-user one-time import (§7). Map `source=tmdb` rows into `media_external_ids`, find-or-create the shared Show/Episode/Movie, then create per-user tracking rows for the importing user. Inspect a real export's headers before finalizing.
+- [x] **Yamtrack CSV importer** — per-user queued import with additive/replacement strategies, real-export parsing, TMDB external-ID matching, progress/error history, and idempotent watch semantics (§7).
 - [ ] **Plex integration** — sync watched state from a Plex server (scrobble / library) as an additional per-user source; evaluate other providers (Jellyfin, Trakt, Emby) behind the same provider seam as TMDB.
 - [ ] Offline browsing of previously-viewed lists + queued offline watched-toggle writes (Phase 2 stretch, §8)

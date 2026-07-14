@@ -1,6 +1,7 @@
 import { Link, router } from '@inertiajs/react';
 import {
     Ellipsis,
+    FileClock,
     LogOut,
     Palette,
     ShieldCheck,
@@ -18,6 +19,7 @@ import { logout } from '@/routes';
 import { edit as appearanceSettings } from '@/routes/appearance';
 import { edit as accountSettings } from '@/routes/profile';
 import { edit as securitySettings } from '@/routes/security';
+import { index as importHistory } from '@/routes/yamtrack-import';
 
 const profileDestinations = [
     {
@@ -30,6 +32,11 @@ const profileDestinations = [
         label: 'Appearance',
         href: appearanceSettings(),
         icon: Palette,
+    },
+    {
+        label: 'Import history',
+        href: importHistory(),
+        icon: FileClock,
     },
 ];
 
