@@ -49,19 +49,19 @@ test('a successful dump is finalized with the expected connection arguments and 
 
     Process::fake(function (PendingProcess $process) {
         $fileArgument = array_search('--file', $process->command, true);
-        File::put($process->command[$fileArgument + 1], 'compressed dump');
+        File::put($process->command[$fileArgument + 1], 'plain SQL dump');
 
         return Process::result();
     });
 
-    $expectedPath = $this->dumpDirectory.DIRECTORY_SEPARATOR.'tracker-production-2026-07-14_020000.dump';
+    $expectedPath = $this->dumpDirectory.DIRECTORY_SEPARATOR.'tracker-production-2026-07-14_020000.sql';
 
     $this->artisan('app:dump-database')
         ->expectsOutputToContain($expectedPath)
         ->doesntExpectOutputToContain('super-secret-password')
         ->assertSuccessful();
 
-    expect(File::get($expectedPath))->toBe('compressed dump')
+    expect(File::get($expectedPath))->toBe('plain SQL dump')
         ->and(File::glob($this->dumpDirectory.DIRECTORY_SEPARATOR.'*.tmp'))->toBe([]);
 
     Process::assertRan(function (PendingProcess $process): bool {
@@ -76,12 +76,13 @@ test('a successful dump is finalized with the expected connection arguments and 
             '--dbname',
             'tracker production',
             '--format',
-            'custom',
-            '--compress',
-            '9',
+            'plain',
+            '--clean',
+            '--if-exists',
+            '--no-owner',
             '--no-password',
             '--file',
-            $process->command[15],
+            $process->command[16],
         ])->not->toContain('super-secret-password')
             ->and($process->environment)->toMatchArray([
                 'PGPASSWORD' => 'super-secret-password',
@@ -95,7 +96,7 @@ test('a successful dump is finalized with the expected connection arguments and 
 test('a failed pg dump returns failure, redacts the password, and removes its temporary file', function () {
     Carbon::setTestNow('2026-07-14 02:00:00');
     File::ensureDirectoryExists($this->dumpDirectory);
-    $expiredDump = $this->dumpDirectory.DIRECTORY_SEPARATOR.'tracker-production-2026-07-01_020000.dump';
+    $expiredDump = $this->dumpDirectory.DIRECTORY_SEPARATOR.'tracker-production-2026-07-01_020000.sql';
     File::put($expiredDump, 'completed old dump');
     touch($expiredDump, now()->startOfDay()->subDays(8)->getTimestamp());
 
@@ -122,8 +123,8 @@ test('completed dumps older than the retention cutoff are removed after a succes
     Carbon::setTestNow('2026-07-14 14:30:00');
     File::ensureDirectoryExists($this->dumpDirectory);
 
-    $expiredDump = $this->dumpDirectory.DIRECTORY_SEPARATOR.'tracker-production-2026-07-06_020000.dump';
-    $boundaryDump = $this->dumpDirectory.DIRECTORY_SEPARATOR.'tracker-production-2026-07-07_000000.dump';
+    $expiredDump = $this->dumpDirectory.DIRECTORY_SEPARATOR.'tracker-production-2026-07-06_020000.sql';
+    $boundaryDump = $this->dumpDirectory.DIRECTORY_SEPARATOR.'tracker-production-2026-07-07_000000.sql';
     $temporaryFile = $this->dumpDirectory.DIRECTORY_SEPARATOR.'.tracker-production-old.tmp';
     $unrelatedFile = $this->dumpDirectory.DIRECTORY_SEPARATOR.'notes.txt';
 
@@ -140,7 +141,7 @@ test('completed dumps older than the retention cutoff are removed after a succes
 
     Process::fake(function (PendingProcess $process) {
         $fileArgument = array_search('--file', $process->command, true);
-        File::put($process->command[$fileArgument + 1], 'new compressed dump');
+        File::put($process->command[$fileArgument + 1], 'new plain SQL dump');
 
         return Process::result();
     });
@@ -153,7 +154,7 @@ test('completed dumps older than the retention cutoff are removed after a succes
         ->and(File::exists($boundaryDump))->toBeTrue()
         ->and(File::exists($temporaryFile))->toBeTrue()
         ->and(File::exists($unrelatedFile))->toBeTrue()
-        ->and(File::exists($this->dumpDirectory.DIRECTORY_SEPARATOR.'tracker-production-2026-07-14_143000.dump'))->toBeTrue();
+        ->and(File::exists($this->dumpDirectory.DIRECTORY_SEPARATOR.'tracker-production-2026-07-14_143000.sql'))->toBeTrue();
 });
 
 test('an invalid retention value fails before pg dump is invoked', function () {

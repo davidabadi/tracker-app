@@ -18,7 +18,7 @@ use RuntimeException;
 use Throwable;
 
 #[Signature('app:dump-database')]
-#[Description('Create a compressed PostgreSQL database dump')]
+#[Description('Create a plain-text PostgreSQL database dump')]
 class DumpDatabase extends Command
 {
     private const LOCK_NAME = 'database-dumps:running';
@@ -76,7 +76,7 @@ class DumpDatabase extends Command
 
         $databaseName = (string) ($connectionConfig['database'] ?? '');
         $filenameDatabase = Str::slug($databaseName) ?: 'database';
-        $filename = $filenameDatabase.'-'.now()->format('Y-m-d_His').'.dump';
+        $filename = $filenameDatabase.'-'.now()->format('Y-m-d_His').'.sql';
         $finalPath = $directory.DIRECTORY_SEPARATOR.$filename;
         $temporaryPath = $directory.DIRECTORY_SEPARATOR.'.'.$filename.'.'.Str::random(12).'.tmp';
         $password = (string) ($connectionConfig['password'] ?? '');
@@ -197,7 +197,7 @@ class DumpDatabase extends Command
         $deletedDumpCount = 0;
 
         foreach ($filesystem->files($directory) as $file) {
-            if ($file->getExtension() !== 'dump' || $file->getMTime() >= $cutoffTimestamp) {
+            if ($file->getExtension() !== 'sql' || $file->getMTime() >= $cutoffTimestamp) {
                 continue;
             }
 
@@ -228,9 +228,10 @@ class DumpDatabase extends Command
             '--dbname',
             (string) ($connectionConfig['database'] ?? ''),
             '--format',
-            'custom',
-            '--compress',
-            '9',
+            'plain',
+            '--clean',
+            '--if-exists',
+            '--no-owner',
             '--no-password',
             '--file',
             $temporaryPath,
