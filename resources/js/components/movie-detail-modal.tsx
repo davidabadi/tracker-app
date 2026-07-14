@@ -240,6 +240,7 @@ export function MovieDetailModal({
                                     label={data.movie.title}
                                     onAction={handleWatchAction}
                                     disabled={toggleHttp.processing}
+                                    elevated
                                 />
                             </div>
                         </div>
@@ -417,6 +418,7 @@ export function MovieDetailModal({
                 description="This removes the movie from your list and marks it as not watched."
                 confirmLabel="Untrack"
                 destructive
+                elevated
                 onConfirm={handleUntrackConfirmed}
                 onOpenChange={setConfirmingUntrack}
             />

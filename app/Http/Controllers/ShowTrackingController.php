@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\ShowStatus;
 use App\Http\Requests\SetShowStatusRequest;
 use App\Http\Requests\TrackShowRequest;
 use App\Http\Requests\UpdateShowStatusRequest;
@@ -30,15 +31,15 @@ class ShowTrackingController extends Controller
     /**
      * Track a show: find-or-create the shared Show (pulling its full
      * season/episode data from TMDB the first time the household sees it), then
-     * upsert this user's tracking row at the requested status.
+     * create this user's tracking row as Watching if it does not exist.
      */
     public function store(TrackShowRequest $request, MediaLibraryService $library): JsonResponse
     {
         $show = $library->findOrCreateShow((int) $request->integer('tmdb_id'));
 
-        $tracking = $request->user()->showTrackings()->updateOrCreate(
+        $tracking = $request->user()->showTrackings()->firstOrCreate(
             ['show_id' => $show->id],
-            ['status' => $request->status()],
+            ['status' => ShowStatus::Watching],
         );
 
         return response()->json([

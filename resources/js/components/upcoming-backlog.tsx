@@ -1,11 +1,15 @@
 import { useHttp } from '@inertiajs/react';
 import { ChevronDown } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Spinner } from '@/components/ui/spinner';
 import {
-    EpisodeRow,
-    type UpcomingEpisode,
-} from '@/components/upcoming-episode-row';
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+} from 'react';
+import { Spinner } from '@/components/ui/spinner';
+import { EpisodeRow } from '@/components/upcoming-episode-row';
+import type { UpcomingEpisode } from '@/components/upcoming-episode-row';
 import { formatLongDate, parseDateString } from '@/lib/dates';
 import { backlog } from '@/routes/shows/upcoming';
 

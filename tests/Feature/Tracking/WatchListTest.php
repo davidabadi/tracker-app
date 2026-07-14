@@ -201,12 +201,16 @@ it('keeps another member\'s progress out of my watch list', function () {
         ->assertInertia(fn (Assert $page) => $page->has('watchNext', 0)->has('haventStarted', 0));
 });
 
-it('shows only unwatched tracked movies in Watch Next', function () {
+it('shows only released unwatched tracked movies in Watch Next', function () {
     $user = User::factory()->create();
-    $seen = Movie::factory()->create();
-    $unseen = Movie::factory()->create();
+    $seen = Movie::factory()->create(['release_date' => $user->localToday()->subDay()]);
+    $unseen = Movie::factory()->create(['release_date' => $user->localToday()]);
+    $future = Movie::factory()->create(['release_date' => $user->localToday()->addDay()]);
+    $undated = Movie::factory()->create(['release_date' => null]);
     $user->movieTrackings()->create(['movie_id' => $seen->id, 'watched' => true, 'watch_count' => 2]);
     $user->movieTrackings()->create(['movie_id' => $unseen->id, 'watched' => false]);
+    $user->movieTrackings()->create(['movie_id' => $future->id, 'watched' => false]);
+    $user->movieTrackings()->create(['movie_id' => $undated->id, 'watched' => false]);
 
     $this->actingAs($user)->get(route('movies'))
         ->assertOk()
@@ -214,7 +218,7 @@ it('shows only unwatched tracked movies in Watch Next', function () {
             ->component('movies')
             ->has('watchNext', 1)
             ->where('watchNext.0.id', $unseen->id)
-            ->where('trackedCount', 2)
+            ->where('trackedCount', 4)
         );
 });
 

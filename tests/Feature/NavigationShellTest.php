@@ -107,7 +107,7 @@ it('uses the Tracker branding throughout the React shell', function () {
         ->toContain('<Play')
         ->not->toContain('<img')
         ->and($logo)
-        ->toContain('Tracker')
+        ->toContain('TV Time')
         ->not->toContain('Laravel Starter Kit')
         ->and($trackerLayout)
         ->toContain('<AppLogoIcon')

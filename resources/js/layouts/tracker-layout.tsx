@@ -37,7 +37,7 @@ function TrackerWordmark() {
         >
             <AppLogoIcon alt="" className="size-8" />
             <span className="text-base font-semibold tracking-tight">
-                Tracker
+                TV Time
             </span>
         </Link>
     );

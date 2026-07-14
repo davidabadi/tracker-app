@@ -212,13 +212,13 @@ it('bulk-marks only episodes that have aired in the user timezone', function () 
         'show_id' => $show->id,
         'season_number' => 1,
         'episode_number' => 1,
-        'air_date' => today(),
+        'air_date' => $user->localToday(),
     ]);
     $future = Episode::factory()->create([
         'show_id' => $show->id,
         'season_number' => 1,
         'episode_number' => 2,
-        'air_date' => today()->addWeek(),
+        'air_date' => $user->localToday()->addWeek(),
     ]);
     $undated = Episode::factory()->create([
         'show_id' => $show->id,

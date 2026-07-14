@@ -122,9 +122,14 @@ class WatchListController extends Controller
     public function movies(Request $request): Response
     {
         $user = $request->user();
+        $today = $user->localToday();
 
         $watchNext = $user->movieTrackings()
             ->where('watched', false)
+            ->whereHas('movie', function ($query) use ($today): void {
+                $query->whereNotNull('release_date')
+                    ->whereDate('release_date', '<=', $today);
+            })
             ->with('movie:id,title,poster_image_url,release_date')
             ->get()
             ->sortBy(fn ($tracking): string => (string) $tracking->movie?->title)

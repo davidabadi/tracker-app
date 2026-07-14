@@ -7,7 +7,7 @@ type AppLogoIconProps = Omit<HTMLAttributes<HTMLSpanElement>, 'children'> & {
 };
 
 export default function AppLogoIcon({
-    alt = 'Tracker',
+    alt = 'TV Time',
     className,
     ...props
 }: AppLogoIconProps) {

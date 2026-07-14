@@ -21,7 +21,7 @@ it('tracks a show and pulls its full season/episode data on first track', functi
     $response = $this->actingAs($user)->postJson(route('track.shows.store'), ['tmdb_id' => 1399]);
 
     $response->assertCreated()
-        ->assertJsonPath('tracking.status', 'watch_later') // default when none given
+        ->assertJsonPath('tracking.status', 'watching')
         ->assertJsonPath('show.seasons', 2)
         ->assertJsonPath('show.episodes', 3);
 
@@ -31,28 +31,28 @@ it('tracks a show and pulls its full season/episode data on first track', functi
 
     $this->assertDatabaseHas('user_show_tracking', [
         'user_id' => $user->id,
-        'status' => 'watch_later',
+        'status' => 'watching',
     ]);
 });
 
-it('respects an explicit status when tracking', function () {
+it('always tracks a new show as watching', function () {
     fakeTmdb();
     $user = User::factory()->create();
 
     $this->actingAs($user)
-        ->postJson(route('track.shows.store'), ['tmdb_id' => 1399, 'status' => 'watching'])
+        ->postJson(route('track.shows.store'), ['tmdb_id' => 1399, 'status' => 'watch_later'])
         ->assertCreated()
         ->assertJsonPath('tracking.status', 'watching');
 });
 
-it('rejects an invalid status', function () {
+it('ignores a status supplied while tracking', function () {
     fakeTmdb();
     $user = User::factory()->create();
 
     $this->actingAs($user)
         ->postJson(route('track.shows.store'), ['tmdb_id' => 1399, 'status' => 'bogus'])
-        ->assertStatus(422)
-        ->assertJsonValidationErrorFor('status');
+        ->assertCreated()
+        ->assertJsonPath('tracking.status', 'watching');
 });
 
 it('is idempotent per user and does not duplicate the show', function () {
@@ -64,7 +64,7 @@ it('is idempotent per user and does not duplicate the show', function () {
 
     expect(Show::count())->toBe(1);
     expect(UserShowTracking::where('user_id', $user->id)->count())->toBe(1);
-    expect(UserShowTracking::where('user_id', $user->id)->first()->status)->toBe(ShowStatus::Finished);
+    expect(UserShowTracking::where('user_id', $user->id)->first()->status)->toBe(ShowStatus::Watching);
 });
 
 it('updates the status of the user\'s own tracked show', function () {

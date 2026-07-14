@@ -41,8 +41,8 @@ export default defineConfig({
             injectRegister: false,
             buildBase: '/build/',
             manifest: {
-                name: 'Tracker',
-                short_name: 'Tracker',
+                name: 'TV Time',
+                short_name: 'TV Time',
                 description:
                     'Household TV show and movie tracker — what am I watching, what is next, what is coming.',
                 id: '/',

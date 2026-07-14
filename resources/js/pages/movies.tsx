@@ -66,7 +66,8 @@ export default function Movies({
                         </div>
                         {watchNext.length === 0 ? (
                             <p className="mt-6 text-center text-sm text-muted-foreground">
-                                You've watched everything you're tracking. Nice.
+                                There are no released, unwatched movies on your
+                                watch list.
                             </p>
                         ) : (
                             <div className="mt-4">

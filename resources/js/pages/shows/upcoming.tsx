@@ -1,5 +1,5 @@
 import { Head, router } from '@inertiajs/react';
-import { CalendarClock } from 'lucide-react';
+import { CalendarClock, ChevronDown } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { EpisodeQuickViewModal } from '@/components/episode-quick-view-modal';
@@ -8,10 +8,8 @@ import { MediaSubTabs } from '@/components/media-sub-tabs';
 import { PageScrollArea } from '@/components/page-scroll-area';
 import { ShowDetailModal } from '@/components/show-detail-modal';
 import { UpcomingBacklog } from '@/components/upcoming-backlog';
-import {
-    EpisodeRow,
-    type UpcomingEpisode,
-} from '@/components/upcoming-episode-row';
+import { EpisodeRow } from '@/components/upcoming-episode-row';
+import type { UpcomingEpisode } from '@/components/upcoming-episode-row';
 import {
     daysBetween,
     formatLongDate,
@@ -44,6 +42,55 @@ function sectionLabel(airDate: string, today: string): string {
     return formatLongDate(date);
 }
 
+type FutureSection = {
+    key: string;
+    label: string;
+    clusters: UpcomingEpisode[][];
+};
+
+function groupFutureEpisodes(
+    episodes: UpcomingEpisode[],
+    today: string,
+): FutureSection[] {
+    const sections: FutureSection[] = [];
+
+    for (const episode of episodes) {
+        const days = daysBetween(
+            parseDateString(today),
+            parseDateString(episode.air_date),
+        );
+        const key = days >= 7 ? 'later' : episode.air_date;
+        let section = sections.find((candidate) => candidate.key === key);
+
+        if (!section) {
+            section = {
+                key,
+                label: key === 'later' ? 'Later' : sectionLabel(key, today),
+                clusters: [],
+            };
+            sections.push(section);
+        }
+
+        const cluster = section.clusters.find(
+            (candidate) =>
+                candidate[0].show_id === episode.show_id &&
+                candidate[0].air_date === episode.air_date,
+        );
+
+        if (cluster) {
+            cluster.push(episode);
+        } else {
+            section.clusters.push([episode]);
+        }
+    }
+
+    return sections;
+}
+
+function clusterKey(episode: UpcomingEpisode): string {
+    return `${episode.show_id}|${episode.air_date}`;
+}
+
 export default function ShowsUpcoming({
     episodes,
     today,
@@ -56,17 +103,11 @@ export default function ShowsUpcoming({
         showId: number;
         title: string;
     } | null>(null);
+    const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
     const scrollRef = useRef<HTMLDivElement | null>(null);
 
-    // Episodes arrive sorted by air date; fold them into one section per date.
-    const sections = new Map<string, UpcomingEpisode[]>();
-
-    for (const episode of episodes) {
-        const group = sections.get(episode.air_date) ?? [];
-        group.push(episode);
-        sections.set(episode.air_date, group);
-    }
+    const sections = groupFutureEpisodes(episodes, today);
 
     function openShow(episode: UpcomingEpisode) {
         setShowModal({
@@ -121,29 +162,82 @@ export default function ShowsUpcoming({
                         />
                     ) : (
                         <div className="space-y-6">
-                            {[...sections.entries()].map(([airDate, group]) => (
-                                <section key={airDate}>
+                            {sections.map((section) => (
+                                <section key={section.key}>
                                     <div className="flex justify-center">
                                         <span className="rounded-full bg-muted px-3.5 py-1 text-xs font-semibold tracking-wider uppercase">
-                                            {sectionLabel(airDate, today)}
+                                            {section.label}
                                         </span>
                                     </div>
                                     <ul className="mt-3 space-y-3">
-                                        {group.map((episode) => (
-                                            <EpisodeRow
-                                                key={episode.id}
-                                                episode={episode}
-                                                today={today}
-                                                onOpenEpisode={() =>
-                                                    setEpisodeModalId(
-                                                        episode.id,
-                                                    )
-                                                }
-                                                onOpenShow={() =>
-                                                    openShow(episode)
-                                                }
-                                            />
-                                        ))}
+                                        {section.clusters.map((cluster) => {
+                                            const key = clusterKey(cluster[0]);
+                                            const collapsed =
+                                                cluster.length > 1 &&
+                                                !expanded.has(key);
+                                            const visible = collapsed
+                                                ? cluster.slice(0, 1)
+                                                : cluster;
+
+                                            return (
+                                                <li
+                                                    key={key}
+                                                    className="space-y-3"
+                                                >
+                                                    <ul className="space-y-3">
+                                                        {visible.map(
+                                                            (episode) => (
+                                                                <EpisodeRow
+                                                                    key={
+                                                                        episode.id
+                                                                    }
+                                                                    episode={
+                                                                        episode
+                                                                    }
+                                                                    today={
+                                                                        today
+                                                                    }
+                                                                    onOpenEpisode={() =>
+                                                                        setEpisodeModalId(
+                                                                            episode.id,
+                                                                        )
+                                                                    }
+                                                                    onOpenShow={() =>
+                                                                        openShow(
+                                                                            episode,
+                                                                        )
+                                                                    }
+                                                                />
+                                                            ),
+                                                        )}
+                                                    </ul>
+                                                    {collapsed && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                setExpanded(
+                                                                    (
+                                                                        previous,
+                                                                    ) =>
+                                                                        new Set(
+                                                                            previous,
+                                                                        ).add(
+                                                                            key,
+                                                                        ),
+                                                                )
+                                                            }
+                                                            className="flex w-full items-center justify-between rounded-xl bg-surface px-4 py-3 text-left text-sm font-semibold text-sky-400 transition-colors hover:brightness-110"
+                                                        >
+                                                            <span>
+                                                                {cluster.length}{' '}
+                                                                episodes
+                                                            </span>
+                                                            <ChevronDown className="size-5" />
+                                                        </button>
+                                                    )}
+                                                </li>
+                                            );
+                                        })}
                                     </ul>
                                 </section>
                             ))}

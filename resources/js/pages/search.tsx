@@ -105,8 +105,7 @@ function TrackButton({
 
                 onSetOverride({
                     tracked: true,
-                    libraryId:
-                        payload.show?.id ?? payload.movie?.id ?? null,
+                    libraryId: payload.show?.id ?? payload.movie?.id ?? null,
                 });
             },
             onError: () => onSetOverride({ tracked: false }),
@@ -118,9 +117,7 @@ function TrackButton({
             type="button"
             onClick={tracked ? onUntrackRequest : handleTrack}
             aria-label={
-                tracked
-                    ? `Untrack ${result.title}`
-                    : `Track ${result.title}`
+                tracked ? `Untrack ${result.title}` : `Track ${result.title}`
             }
             className={cn(
                 'flex size-11 shrink-0 items-center justify-center rounded-xl border transition-colors',
@@ -219,9 +216,9 @@ export default function Search({
     const [untrackTarget, setUntrackTarget] = useState<SearchResult | null>(
         null,
     );
-    const [overrides, setOverrides] = useState<
-        Record<string, ResultOverride>
-    >({});
+    const [overrides, setOverrides] = useState<Record<string, ResultOverride>>(
+        {},
+    );
 
     const untrackHttp = useHttp({});
 
@@ -264,8 +261,7 @@ export default function Search({
             [resultKey(result)]: {
                 tracked: previous[resultKey(result)]?.tracked ?? result.tracked,
                 libraryId:
-                    previous[resultKey(result)]?.libraryId ??
-                    result.library_id,
+                    previous[resultKey(result)]?.libraryId ?? result.library_id,
                 ...override,
             },
         }));
