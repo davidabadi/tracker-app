@@ -1,7 +1,13 @@
 import { Head, router, useHttp } from '@inertiajs/react';
 import { Check, EyeOff, Tv } from 'lucide-react';
 import type { CSSProperties } from 'react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+} from 'react';
 import { toggle as toggleEpisode } from '@/actions/App/Http/Controllers/EpisodeWatchController';
 import {
     removeFromList,
@@ -22,65 +28,185 @@ import type { WatchedHistoryHandle } from '@/components/watched-history';
 import type { WatchAction } from '@/components/watched-toggle';
 import { hasAired } from '@/lib/media';
 import { cn } from '@/lib/utils';
+import { positionRelativeTo } from '@/lib/watch-list-layout';
 import { shows } from '@/routes';
 import { upcoming } from '@/routes/shows';
 
-/**
- * FLIP: after each render, animate every tracked row from where it was in the
- * previous committed layout to where it is now. This is what makes a show
- * gliding to the top of Watch Next (or the list closing up after one is removed)
- * read as a smooth transition rather than a jump. Returns a ref registrar keyed
- * by show id.
- */
-function useFlip() {
-    const nodes = useRef(new Map<number, HTMLLIElement>());
-    const prevRects = useRef(new Map<number, DOMRect>());
+type WatchListPayload = {
+    watchNext: ShowWatchRowData[];
+    haventStarted: ShowWatchRowData[];
+    watchLaterCount: number;
+    watchLater?: ShowWatchRowData[];
+};
 
-    useLayoutEffect(() => {
-        const next = new Map<number, DOMRect>();
+type ActiveMutation = {
+    generation: number;
+    showId: number;
+    sweepStart: number;
+    sweepComplete: boolean;
+    movementComplete: boolean;
+    overlayComplete: boolean;
+    phase: 'saving' | 'reconciling' | 'moving' | 'removing';
+    authoritative: WatchListPayload | null;
+};
+
+type RelativePosition = { left: number; top: number };
+
+function prefersReducedMotion(): boolean {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/**
+ * Explicit FLIP for a single authoritative reconciliation. Measurements are
+ * relative to the stable Watch List wrapper, so history prepends and scrollTop
+ * changes cannot masquerade as list movement.
+ */
+function useAuthoritativeFlip(
+    wrapperRef: React.RefObject<HTMLDivElement | null>,
+) {
+    const nodes = useRef(new Map<number, HTMLLIElement>());
+    const activeAnimations = useRef(new Map<number, Animation>());
+    const beforePositions = useRef<Map<number, RelativePosition> | null>(null);
+    const completion = useRef<(() => void) | null>(null);
+    const animationGeneration = useRef(0);
+
+    const measure = useCallback(() => {
+        const wrapper = wrapperRef.current;
+        const positions = new Map<number, RelativePosition>();
+
+        if (!wrapper) {
+            return positions;
+        }
+
+        const wrapperBounds = wrapper.getBoundingClientRect();
 
         nodes.current.forEach((node, id) => {
-            if (node) {
-                next.set(id, node.getBoundingClientRect());
-            }
+            const bounds = node.getBoundingClientRect();
+
+            positions.set(id, positionRelativeTo(bounds, wrapperBounds));
         });
 
-        next.forEach((rect, id) => {
-            const prev = prevRects.current.get(id);
+        return positions;
+    }, [wrapperRef]);
 
-            if (!prev) {
-                return;
-            }
+    const cancelAnimations = useCallback(() => {
+        animationGeneration.current += 1;
+        activeAnimations.current.forEach((animation) => animation.cancel());
+        activeAnimations.current.clear();
+    }, []);
 
-            const dx = prev.left - rect.left;
-            const dy = prev.top - rect.top;
+    const prepare = useCallback(
+        (onComplete: () => void) => {
+            cancelAnimations();
+            beforePositions.current = measure();
+            completion.current = onComplete;
+        },
+        [cancelAnimations, measure],
+    );
 
-            if (dx || dy) {
-                nodes.current
-                    .get(id)
-                    ?.animate(
-                        [
-                            { transform: `translate(${dx}px, ${dy}px)` },
-                            { transform: 'translate(0, 0)' },
-                        ],
-                        {
-                            duration: 360,
-                            easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
-                        },
-                    );
+    useLayoutEffect(() => {
+        const before = beforePositions.current;
+        const onComplete = completion.current;
+
+        if (!before || !onComplete) {
+            return;
+        }
+
+        beforePositions.current = null;
+        completion.current = null;
+
+        const generation = ++animationGeneration.current;
+        const after = measure();
+        const finished: Promise<unknown>[] = [];
+
+        if (!prefersReducedMotion()) {
+            after.forEach((position, id) => {
+                const previous = before.get(id);
+                const node = nodes.current.get(id);
+
+                if (!previous || !node) {
+                    return;
+                }
+
+                const dx = previous.left - position.left;
+                const dy = previous.top - position.top;
+
+                if (dx === 0 && dy === 0) {
+                    return;
+                }
+
+                activeAnimations.current.get(id)?.cancel();
+
+                const animation = node.animate(
+                    [
+                        { transform: `translate(${dx}px, ${dy}px)` },
+                        { transform: 'translate(0, 0)' },
+                    ],
+                    {
+                        duration: 520,
+                        easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+                    },
+                );
+
+                activeAnimations.current.set(id, animation);
+                finished.push(animation.finished.catch(() => undefined));
+            });
+        }
+
+        void Promise.all(finished).then(() => {
+            if (animationGeneration.current === generation) {
+                activeAnimations.current.clear();
+                onComplete();
             }
         });
-
-        prevRects.current = next;
     });
 
-    return (id: number) => (node: HTMLLIElement | null) => {
+    const remove = useCallback((id: number, onComplete: () => void) => {
+        const node = nodes.current.get(id);
+
+        activeAnimations.current.get(id)?.cancel();
+
+        if (!node || prefersReducedMotion()) {
+            queueMicrotask(onComplete);
+
+            return;
+        }
+
+        const generation = ++animationGeneration.current;
+        const animation = node.animate(
+            [
+                { opacity: 1, transform: 'scale(1)' },
+                { opacity: 0, transform: 'scale(0.98)' },
+            ],
+            {
+                duration: 320,
+                easing: 'cubic-bezier(0.4, 0, 1, 1)',
+                fill: 'forwards',
+            },
+        );
+
+        activeAnimations.current.set(id, animation);
+        void animation.finished
+            .then(() => {
+                if (animationGeneration.current === generation) {
+                    activeAnimations.current.delete(id);
+                    onComplete();
+                }
+            })
+            .catch(() => undefined);
+    }, []);
+
+    const register = useCallback((id: number, node: HTMLLIElement | null) => {
         if (node) {
             nodes.current.set(id, node);
         } else {
             nodes.current.delete(id);
         }
-    };
+    }, []);
+
+    useEffect(() => cancelAnimations, [cancelAnimations]);
+
+    return { prepare, register, remove };
 }
 
 /**
@@ -137,68 +263,52 @@ export default function Shows({
     } | null>(null);
 
     const scrollRef = useRef<HTMLDivElement | null>(null);
+    const watchListAnchorRef = useRef<HTMLDivElement | null>(null);
+    const watchListWrapperRef = useRef<HTMLDivElement | null>(null);
     const historyRef = useRef<WatchedHistoryHandle | null>(null);
 
-    // Rows are held locally so a mark-watched can reorder/remove them with a
-    // transition before the authoritative server data reloads in.
     const [rows, setRows] = useState<ShowWatchRowData[]>(() => [
         ...watchNext,
         ...haventStarted,
     ]);
-    const [markingId, setMarkingId] = useState<number | null>(null);
-    const [coveringSweep, setCoveringSweep] = useState<{
-        id: number;
-        start: number;
-    } | null>(null);
-    const [revealingId, setRevealingId] = useState<number | null>(null);
-    const [collapsingId, setCollapsingId] = useState<number | null>(null);
+    const [mutation, setMutation] = useState<ActiveMutation | null>(null);
+    const mutationRef = useRef<ActiveMutation | null>(null);
+    const nextMutationGeneration = useRef(0);
 
     // The inline Watch Later section (revealed by the button, spec item 2).
     const [showWatchLater, setShowWatchLater] = useState(false);
     const [watchLaterRows, setWatchLaterRows] = useState<ShowWatchRowData[]>(
-        [],
+        watchLater ?? [],
     );
-    // Mirrored so reloadList (called from timeouts/callbacks) always includes the
-    // Watch Later prop once the section is revealed.
+    // Mirrored so reconciliation reloads include the optional Watch Later prop
+    // after that section has been revealed.
     const showWatchLaterRef = useRef(false);
 
     useEffect(() => {
         showWatchLaterRef.current = showWatchLater;
     }, [showWatchLater]);
 
-    const flipRef = useFlip();
-    const { patch } = useHttp({ action: 'increment' as WatchAction });
-    const watchLaterHttp = useHttp({ action: 'increment' as WatchAction });
+    const {
+        prepare: prepareFlip,
+        register: registerFlip,
+        remove: removeWithAnimation,
+    } = useAuthoritativeFlip(watchListWrapperRef);
+    const watchHttp = useHttp({ action: 'increment' as WatchAction });
     const statusHttp = useHttp({ status: '' });
     const removeHttp = useHttp({});
-
-    // Resync with the server whenever fresh Watch List data arrives (reloads) —
-    // the "adjust state during render" pattern rather than an effect, so the new
-    // rows are in place before the FLIP layout effect measures them. While a
-    // mark-watched animation is running (markingId set) the sequence drives
-    // `rows` by hand, so the blanket resync stands down until it finishes.
-    const [syncedProps, setSyncedProps] = useState({
-        watchNext,
-        haventStarted,
+    const requestCancellationRef = useRef({
+        watch: watchHttp.cancel,
+        status: statusHttp.cancel,
+        remove: removeHttp.cancel,
     });
 
-    if (
-        (syncedProps.watchNext !== watchNext ||
-            syncedProps.haventStarted !== haventStarted) &&
-        markingId === null
-    ) {
-        setSyncedProps({ watchNext, haventStarted });
-        setRows([...watchNext, ...haventStarted]);
-    }
-
-    // The optional Watch Later prop only arrives once requested; mirror it into
-    // local state so swipes can mutate the section before a reload lands.
-    const [syncedWatchLater, setSyncedWatchLater] = useState(watchLater);
-
-    if (watchLater !== undefined && watchLater !== syncedWatchLater) {
-        setSyncedWatchLater(watchLater);
-        setWatchLaterRows(watchLater);
-    }
+    useEffect(() => {
+        requestCancellationRef.current = {
+            watch: watchHttp.cancel,
+            status: statusHttp.cancel,
+            remove: removeHttp.cancel,
+        };
+    }, [watchHttp.cancel, statusHttp.cancel, removeHttp.cancel]);
 
     const watchNextRows = rows.filter((row) => row.section === 'watch_next');
     const haventStartedRows = rows.filter(
@@ -209,26 +319,83 @@ export default function Shows({
     const showEmpty =
         rows.length === 0 && !hasWatchLaterSection && watchLaterCount === 0;
 
-    function finishAnim() {
-        setMarkingId(null);
-        setCoveringSweep(null);
-        setRevealingId(null);
-        setCollapsingId(null);
-    }
+    const updateMutation = useCallback(
+        (updater: (current: ActiveMutation) => ActiveMutation | null): void => {
+            setMutation((current) => {
+                if (current === null) {
+                    return null;
+                }
 
-    function reloadList(onFinish?: () => void) {
+                const next = updater(current);
+
+                mutationRef.current = next;
+
+                return next;
+            });
+        },
+        [],
+    );
+
+    const completeTransitionPart = useCallback(
+        (part: 'movement' | 'overlay'): void => {
+            updateMutation((current) => {
+                const next = {
+                    ...current,
+                    movementComplete:
+                        current.movementComplete || part === 'movement',
+                    overlayComplete:
+                        current.overlayComplete || part === 'overlay',
+                };
+
+                return next.phase === 'moving' &&
+                    next.movementComplete &&
+                    next.overlayComplete
+                    ? null
+                    : next;
+            });
+        },
+        [updateMutation],
+    );
+
+    function reloadList(
+        onSuccess?: (payload: WatchListPayload) => void,
+        onError?: () => void,
+    ) {
         const only = ['watchNext', 'haventStarted', 'watchLaterCount'];
 
         if (showWatchLaterRef.current) {
             only.push('watchLater');
         }
 
-        router.reload({ only, onFinish });
+        router.reload({
+            only,
+            onSuccess: (page) => {
+                const payload = page.props as unknown as WatchListPayload;
+
+                if (mutationRef.current === null) {
+                    setRows([...payload.watchNext, ...payload.haventStarted]);
+
+                    if (payload.watchLater !== undefined) {
+                        setWatchLaterRows(payload.watchLater);
+                    }
+                }
+
+                onSuccess?.(payload);
+            },
+            onError,
+        });
     }
 
     function revealWatchLater() {
         setShowWatchLater(true);
-        router.reload({ only: ['watchLater'] });
+        router.reload({
+            only: ['watchLater'],
+            onSuccess: (page) => {
+                const payload = page.props as unknown as WatchListPayload;
+
+                setWatchLaterRows(payload.watchLater ?? []);
+            },
+        });
     }
 
     /**
@@ -264,117 +431,129 @@ export default function Shows({
         }
     }
 
-    /**
-     * Right-swipe on a Watch Later row: mark its surfaced (aired) episode watched
-     * in place. The watch auto-promotes the show to Watching (it moves to Watch
-     * Next on reload); optimistically bump the count, log the episode to Watched
-     * History live, then reconcile.
-     */
-    function incrementWatchLaterRow(row: ShowWatchRowData) {
-        const episode = row.episode;
-
-        if (!episode || !hasAired(episode)) {
-            return;
-        }
-
-        router.flushAll();
-        setWatchLaterRows((current) =>
-            current.map((item) =>
-                item.show_id === row.show_id && item.episode
-                    ? {
-                          ...item,
-                          episode: {
-                              ...item.episode,
-                              watch_count: item.episode.watch_count + 1,
-                          },
-                      }
-                    : item,
-            ),
-        );
-        historyRef.current?.recordWatch(row);
-
-        watchLaterHttp.transform(() => ({ action: 'increment' }));
-        watchLaterHttp.patch(toggleEpisode.url(episode.id), {
-            onFinish: () => reloadList(),
-        });
-    }
-
-    /**
-     * Mark a watching row's surfaced episode watched. The episode is logged to
-     * Watched History immediately (item 5); then the same green sweep plays, and
-     * either the row fades out (last episode) or the next episode is revealed in
-     * place and the row glides to the top of Watch Next (FLIP). Visuals are
-     * optimistic; a background reload reconciles order/badges when it ends.
-     */
     function markWatched(row: ShowWatchRowData, sweepStart = 0) {
-        if (markingId !== null || !row.episode) {
+        if (mutationRef.current !== null || !row.episode) {
             return;
         }
 
-        setMarkingId(row.show_id);
-        setCoveringSweep({ id: row.show_id, start: sweepStart });
+        const generation = ++nextMutationGeneration.current;
+        const activeMutation: ActiveMutation = {
+            generation,
+            showId: row.show_id,
+            sweepStart,
+            sweepComplete: prefersReducedMotion(),
+            movementComplete: false,
+            overlayComplete: false,
+            phase: 'saving',
+            authoritative: null,
+        };
+
+        mutationRef.current = activeMutation;
+        setMutation(activeMutation);
         router.flushAll();
-        historyRef.current?.recordWatch(row);
 
-        const isLast = row.remaining === 0;
+        const fail = () => {
+            if (mutationRef.current?.generation === generation) {
+                mutationRef.current = null;
+                setMutation(null);
+            }
+        };
 
-        patch(toggleEpisode.url(row.episode.id), {
-            onError: () => {
-                finishAnim();
-                reloadList();
-            },
-        });
-        reloadList();
-
-        if (isLast) {
-            window.setTimeout(() => setCollapsingId(row.show_id), 720);
-            window.setTimeout(() => {
-                setRows((current) =>
-                    current.filter((item) => item.show_id !== row.show_id),
-                );
-                finishAnim();
-            }, 1040);
-
-            return;
-        }
-
-        window.setTimeout(() => {
-            setRows((current) =>
-                current.map((item) =>
-                    item.show_id === row.show_id
-                        ? {
-                              ...item,
-                              episode: row.next_episode,
-                              next_episode: null,
-                              remaining: Math.max(0, item.remaining - 1),
-                              badge: null,
-                          }
-                        : item,
-                ),
-            );
-        }, 500);
-
-        window.setTimeout(() => setRevealingId(row.show_id), 640);
-
-        window.setTimeout(() => {
-            setRows((current) => {
-                const moved = current.find(
-                    (item) => item.show_id === row.show_id,
-                );
-
-                if (!moved) {
-                    return current;
+        watchHttp.transform(() => ({ action: 'increment' }));
+        watchHttp.patch(toggleEpisode.url(row.episode.id), {
+            onSuccess: () => {
+                if (mutationRef.current?.generation !== generation) {
+                    return;
                 }
 
-                const rest = current.filter(
-                    (item) => item.show_id !== row.show_id,
-                );
+                historyRef.current?.recordWatch(row);
+                updateMutation((current) => ({
+                    ...current,
+                    phase: 'reconciling',
+                }));
 
-                return [{ ...moved, section: 'watch_next' }, ...rest];
-            });
-            finishAnim();
-        }, 1040);
+                reloadList((authoritative) => {
+                    if (mutationRef.current?.generation !== generation) {
+                        return;
+                    }
+
+                    updateMutation((current) => ({
+                        ...current,
+                        authoritative,
+                    }));
+                }, fail);
+            },
+            onError: fail,
+            onHttpException: fail,
+            onNetworkError: fail,
+        });
     }
+
+    useEffect(() => {
+        if (
+            mutation === null ||
+            mutation.phase !== 'reconciling' ||
+            !mutation.sweepComplete ||
+            mutation.authoritative === null
+        ) {
+            return;
+        }
+
+        const { authoritative, generation, showId } = mutation;
+        const nextRows = [
+            ...authoritative.watchNext,
+            ...authoritative.haventStarted,
+        ];
+        const nextWatchLaterRows = authoritative.watchLater ?? [];
+        const survives = [...nextRows, ...nextWatchLaterRows].some(
+            (row) => row.show_id === showId,
+        );
+
+        const finishMovement = () => {
+            if (mutationRef.current?.generation === generation) {
+                completeTransitionPart('movement');
+            }
+        };
+
+        const commitAuthoritativeRows = () => {
+            if (mutationRef.current?.generation !== generation) {
+                return;
+            }
+
+            prepareFlip(finishMovement);
+            updateMutation((current) => ({
+                ...current,
+                phase: 'moving',
+                overlayComplete: !survives || prefersReducedMotion(),
+            }));
+            setRows(nextRows);
+            setWatchLaterRows(nextWatchLaterRows);
+        };
+
+        if (survives) {
+            commitAuthoritativeRows();
+
+            return;
+        }
+
+        updateMutation((current) => ({ ...current, phase: 'removing' }));
+        removeWithAnimation(showId, commitAuthoritativeRows);
+    }, [
+        mutation,
+        prepareFlip,
+        removeWithAnimation,
+        completeTransitionPart,
+        updateMutation,
+    ]);
+
+    useEffect(() => {
+        return () => {
+            requestCancellationRef.current.watch();
+            requestCancellationRef.current.status();
+            requestCancellationRef.current.remove();
+            mutationRef.current = null;
+        };
+    }, []);
 
     function openShow(row: ShowWatchRowData) {
         setShowModal({
@@ -420,41 +599,56 @@ export default function Shows({
         ) : undefined;
     }
 
+    function watchedSweep(row: ShowWatchRowData) {
+        if (mutation?.showId !== row.show_id) {
+            return statusSweep(row);
+        }
+
+        return (
+            <div
+                aria-hidden
+                style={
+                    {
+                        '--sweep-start': mutation.sweepStart,
+                    } as CSSProperties
+                }
+                onAnimationEnd={(event) => {
+                    if (
+                        event.target !== event.currentTarget ||
+                        mutationRef.current?.generation !== mutation.generation
+                    ) {
+                        return;
+                    }
+
+                    if (event.animationName === 'watch-sweep') {
+                        updateMutation((current) => ({
+                            ...current,
+                            sweepComplete: true,
+                        }));
+                    } else if (event.animationName === 'watch-sweep-out') {
+                        completeTransitionPart('overlay');
+                    }
+                }}
+                className={cn(
+                    'absolute inset-0 z-10 flex items-center justify-center bg-emerald-500',
+                    mutation.phase === 'moving'
+                        ? 'animate-watch-sweep-out'
+                        : 'animate-watch-sweep',
+                )}
+            >
+                <Check className="size-7 text-white" strokeWidth={2.5} />
+            </div>
+        );
+    }
+
     function renderRow(row: ShowWatchRowData) {
         return (
             <ShowWatchRow
                 key={row.show_id}
                 row={row}
-                innerRef={flipRef(row.show_id)}
-                marking={markingId === row.show_id}
-                className={
-                    collapsingId === row.show_id
-                        ? 'scale-[0.98] opacity-0 transition-all duration-300'
-                        : undefined
-                }
-                overlay={
-                    coveringSweep?.id === row.show_id ? (
-                        <div
-                            style={
-                                {
-                                    '--sweep-start': coveringSweep.start,
-                                } as CSSProperties
-                            }
-                            className={cn(
-                                'animate-watch-sweep absolute inset-0 z-10 flex items-center justify-center bg-emerald-500',
-                                revealingId === row.show_id &&
-                                    'opacity-0 transition-opacity duration-300',
-                            )}
-                        >
-                            <Check
-                                className="size-7 text-white"
-                                strokeWidth={2.5}
-                            />
-                        </div>
-                    ) : (
-                        statusSweep(row)
-                    )
-                }
+                innerRef={(node) => registerFlip(row.show_id, node)}
+                marking={mutation !== null}
+                overlay={watchedSweep(row)}
                 onMarkWatched={() => markWatched(row)}
                 onOpenShow={() => openShow(row)}
                 onOpenEpisode={setEpisodeModalId}
@@ -472,11 +666,14 @@ export default function Shows({
             <ShowWatchRow
                 key={row.show_id}
                 row={row}
-                overlay={statusSweep(row)}
+                innerRef={(node) => registerFlip(row.show_id, node)}
+                marking={mutation !== null}
+                overlay={watchedSweep(row)}
+                onMarkWatched={() => markWatched(row)}
                 onOpenShow={() => openShow(row)}
                 onOpenEpisode={setEpisodeModalId}
                 swipe={{
-                    onSwipeRight: () => incrementWatchLaterRow(row),
+                    onSwipeRight: (progress) => markWatched(row, progress),
                     rightEnabled: hasAired(row.episode),
                     onSwipeLeft: (progress) => openStatusMenu(row, progress),
                 }}
@@ -504,14 +701,14 @@ export default function Shows({
                 <WatchedHistory
                     ref={historyRef}
                     scrollRef={scrollRef}
+                    watchListAnchorRef={watchListAnchorRef}
                     onOpenShow={openShow}
                     onOpenEpisode={setEpisodeModalId}
                     onEpisodeUnwatched={() => reloadList()}
                 />
 
-                {/* Watch Next / Haven't Started / Watch Later fill at least the
-                    viewport, so the history above always parks off-screen. */}
-                <div className="min-h-full">
+                <div ref={watchListAnchorRef} aria-hidden />
+                <div ref={watchListWrapperRef} className="min-h-full">
                     {showEmpty ? (
                         <EmptyState
                             icon={Tv}

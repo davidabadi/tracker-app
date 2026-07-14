@@ -75,7 +75,13 @@ class WatchListController extends Controller
 
         // Watch Next is ordered by how recently the user last watched an episode
         // of each show — the show you were most recently watching sits on top.
-        usort($watchNext, fn (array $a, array $b): int => ($b['last_watched_at'] ?? '') <=> ($a['last_watched_at'] ?? ''));
+        usort($watchNext, function (array $a, array $b): int {
+            $recentlyWatched = ($b['last_watched_at'] ?? '') <=> ($a['last_watched_at'] ?? '');
+
+            return $recentlyWatched !== 0
+                ? $recentlyWatched
+                : $a['show_id'] <=> $b['show_id'];
+        });
 
         return Inertia::render('shows', [
             'watchNext' => $watchNext,

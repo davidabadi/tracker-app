@@ -389,18 +389,23 @@ export function MovieDetailModal({
                                                     )}
                                                     <p
                                                         className={cn(
-                                                            'mt-1.5 line-clamp-2 text-xs font-medium',
+                                                            'mt-1.5 line-clamp-2 min-h-[2lh] text-xs font-medium',
                                                             isCurrent &&
                                                                 'text-emerald-400',
                                                         )}
                                                     >
                                                         {part.title}
                                                     </p>
-                                                    {part.year !== null && (
-                                                        <p className="text-xs text-muted-foreground">
-                                                            {part.year}
-                                                        </p>
-                                                    )}
+                                                    <p
+                                                        className="text-xs text-muted-foreground"
+                                                        aria-label={
+                                                            part.year === null
+                                                                ? undefined
+                                                                : `Released ${part.year}`
+                                                        }
+                                                    >
+                                                        {part.year ?? '\u00a0'}
+                                                    </p>
                                                 </button>
                                             );
                                         })}

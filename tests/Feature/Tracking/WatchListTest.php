@@ -164,6 +164,79 @@ it('builds Watch Later rows with their status and start episode', function () {
     expect($rows[0]['episode']['episode_number'])->toBe(1); // where they'd start
 });
 
+it('promotes a Watch Later show into the authoritative Watch Next response after a watch', function () {
+    $user = User::factory()->create();
+    [$show, $episodes] = makeReleasedShow(3);
+    $tracking = $user->showTrackings()->create([
+        'show_id' => $show->id,
+        'status' => ShowStatus::WatchLater,
+    ]);
+
+    $this->actingAs($user)
+        ->patchJson(route('track.episodes.watched', $episodes->first()), ['action' => 'increment'])
+        ->assertOk();
+
+    expect($tracking->fresh()->status)->toBe(ShowStatus::Watching);
+
+    $this->actingAs($user)->get(route('shows'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('watchNext', 1)
+            ->where('watchNext.0.show_id', $show->id)
+            ->where('watchNext.0.episode.id', $episodes->get(1)->id)
+            ->where('watchLaterCount', 0)
+        );
+});
+
+it('removes a show from every visible watch-list section after its final released episode', function () {
+    $user = User::factory()->create();
+    [$show, $episodes] = makeReleasedShow(1);
+    $user->showTrackings()->create([
+        'show_id' => $show->id,
+        'status' => ShowStatus::Watching,
+    ]);
+
+    $this->actingAs($user)
+        ->patchJson(route('track.episodes.watched', $episodes->sole()), ['action' => 'increment'])
+        ->assertOk();
+
+    $this->actingAs($user)->get(route('shows'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('watchNext', 0)
+            ->has('haventStarted', 0)
+        );
+});
+
+it('orders equal watch timestamps deterministically by show id', function () {
+    $user = User::factory()->create();
+    [$firstShow, $firstEpisodes] = makeReleasedShow(2);
+    [$secondShow, $secondEpisodes] = makeReleasedShow(2);
+    $watchedAt = now()->subDay();
+
+    foreach ([[$firstShow, $firstEpisodes], [$secondShow, $secondEpisodes]] as [$show, $episodes]) {
+        $user->showTrackings()->create([
+            'show_id' => $show->id,
+            'status' => ShowStatus::Watching,
+        ]);
+        $user->episodeWatches()->create([
+            'episode_id' => $episodes->first()->id,
+            'watched' => true,
+            'watch_count' => 1,
+            'watched_date' => $watchedAt,
+        ]);
+    }
+
+    $expectedOrder = collect([$firstShow->id, $secondShow->id])->sort()->values()->all();
+
+    $this->actingAs($user)->get(route('shows'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('watchNext.0.show_id', $expectedOrder[0])
+            ->where('watchNext.1.show_id', $expectedOrder[1])
+        );
+});
+
 it('tags each row with status + progress for the left-swipe menu', function () {
     $user = User::factory()->create();
 

@@ -11,6 +11,11 @@ import {
 import { ShowWatchRow } from '@/components/show-watch-row';
 import type { ShowWatchRowData } from '@/components/show-watch-row';
 import { Spinner } from '@/components/ui/spinner';
+import {
+    scrollTopAfterPrepend,
+    scrollTopAtAnchor,
+    shouldLoadOlderHistory,
+} from '@/lib/watch-list-layout';
 import { watchedHistory } from '@/routes/shows';
 
 type HistoryResponse = {
@@ -43,18 +48,25 @@ export const WatchedHistory = forwardRef<
     WatchedHistoryHandle,
     {
         scrollRef: React.RefObject<HTMLDivElement | null>;
+        watchListAnchorRef: React.RefObject<HTMLDivElement | null>;
         onOpenShow: (row: ShowWatchRowData) => void;
         onOpenEpisode: (episodeId: number) => void;
         onEpisodeUnwatched: () => void;
     }
 >(function WatchedHistory(
-    { scrollRef, onOpenShow, onOpenEpisode, onEpisodeUnwatched },
+    {
+        scrollRef,
+        watchListAnchorRef,
+        onOpenShow,
+        onOpenEpisode,
+        onEpisodeUnwatched,
+    },
     ref,
 ) {
     const [rows, setRows] = useState<ShowWatchRowData[]>([]);
     const [loading, setLoading] = useState(false);
 
-    const { get } = useHttp({});
+    const { get, cancel } = useHttp({});
 
     const cursor = useRef<string | null>(null);
     const hasMore = useRef(true);
@@ -62,7 +74,14 @@ export const WatchedHistory = forwardRef<
     const initialised = useRef(false);
     // scrollHeight captured just before content is added above the fold, to
     // compensate scrollTop after and keep the viewport visually still.
-    const anchor = useRef<number | null>(null);
+    const initialPageLoaded = useRef(false);
+    const initialPlacementComplete = useRef(false);
+    const lastScrollTop = useRef(0);
+    const pendingAdjustment = useRef<
+        | { kind: 'initial' }
+        | { kind: 'preserve'; previousHeight: number }
+        | null
+    >(null);
 
     const loadOlder = useCallback(() => {
         if (loadingLock.current || !hasMore.current) {
@@ -79,7 +98,16 @@ export const WatchedHistory = forwardRef<
                 const payload = response as HistoryResponse;
                 const element = scrollRef.current;
 
-                anchor.current = element ? element.scrollHeight : null;
+                const isInitialPage = !initialPageLoaded.current;
+
+                pendingAdjustment.current = isInitialPage
+                    ? { kind: 'initial' }
+                    : element
+                      ? {
+                            kind: 'preserve',
+                            previousHeight: element.scrollHeight,
+                        }
+                      : null;
 
                 // Server sends newest-first; reverse so the batch reads
                 // oldest→newest top-to-bottom, then prepend older-than-loaded.
@@ -89,6 +117,11 @@ export const WatchedHistory = forwardRef<
                 ]);
                 cursor.current = payload.nextCursor;
                 hasMore.current = payload.hasMore;
+                initialPageLoaded.current = true;
+
+                if (payload.rows.length === 0) {
+                    initialPlacementComplete.current = true;
+                }
             },
             onError: () => {
                 hasMore.current = false;
@@ -100,9 +133,9 @@ export const WatchedHistory = forwardRef<
         });
     }, [get, scrollRef]);
 
-    // Eager first batch on mount (item 3). Passive effect so the ancestor
-    // scroller ref is attached; the first prepend's scroll-anchoring (below)
-    // parks Watch Next at the top, leaving the batch off-screen above.
+    // Every mount, including back navigation, deliberately starts at the Watch
+    // List anchor. The first history commit is positioned in a layout effect,
+    // before that committed layout can paint.
     useEffect(() => {
         if (initialised.current) {
             return;
@@ -112,17 +145,44 @@ export const WatchedHistory = forwardRef<
         loadOlder();
     }, [loadOlder]);
 
-    // Compensate scrollTop for content added above the viewport — older pages
-    // prepended at the top, and (via recordWatch) a new row appended at the
-    // bottom of history, which still sits above the Watch-Next fold.
+    useEffect(() => cancel, [cancel]);
+
+    // Initial hydration uses the structural Watch List anchor. Later prepends
+    // and successful watch insertions preserve the user's current viewport.
     useLayoutEffect(() => {
         const element = scrollRef.current;
+        const adjustment = pendingAdjustment.current;
 
-        if (element && anchor.current !== null) {
-            element.scrollTop += element.scrollHeight - anchor.current;
-            anchor.current = null;
+        if (!element || adjustment === null) {
+            return;
         }
-    }, [rows, scrollRef]);
+
+        if (adjustment.kind === 'initial') {
+            const watchListAnchor = watchListAnchorRef.current;
+
+            if (watchListAnchor) {
+                const scrollBounds = element.getBoundingClientRect();
+                const anchorBounds = watchListAnchor.getBoundingClientRect();
+
+                element.scrollTop = scrollTopAtAnchor(
+                    element.scrollTop,
+                    anchorBounds.top,
+                    scrollBounds.top,
+                );
+            }
+
+            initialPlacementComplete.current = true;
+        } else {
+            element.scrollTop = scrollTopAfterPrepend(
+                element.scrollTop,
+                element.scrollHeight,
+                adjustment.previousHeight,
+            );
+        }
+
+        lastScrollTop.current = element.scrollTop;
+        pendingAdjustment.current = null;
+    }, [rows, scrollRef, watchListAnchorRef]);
 
     useEffect(() => {
         const element = scrollRef.current;
@@ -132,7 +192,17 @@ export const WatchedHistory = forwardRef<
         }
 
         function onScroll() {
-            if (element!.scrollTop <= LOAD_AT) {
+            const currentScrollTop = element!.scrollTop;
+            const shouldLoad = shouldLoadOlderHistory(
+                currentScrollTop,
+                lastScrollTop.current,
+                initialPlacementComplete.current,
+                LOAD_AT,
+            );
+
+            lastScrollTop.current = currentScrollTop;
+
+            if (shouldLoad) {
                 loadOlder();
             }
         }
@@ -155,7 +225,12 @@ export const WatchedHistory = forwardRef<
                 const element = scrollRef.current;
                 // The new row lands at the bottom of history, just above the
                 // fold — anchor so it doesn't nudge Watch Next down.
-                anchor.current = element ? element.scrollHeight : null;
+                pendingAdjustment.current = element
+                    ? {
+                          kind: 'preserve',
+                          previousHeight: element.scrollHeight,
+                      }
+                    : null;
 
                 const historyRow: ShowWatchRowData = {
                     ...row,
@@ -168,7 +243,7 @@ export const WatchedHistory = forwardRef<
                     last_watched_at: new Date().toISOString(),
                     episode: {
                         ...episode,
-                        watch_count: Math.max(1, episode.watch_count),
+                        watch_count: episode.watch_count + 1,
                     },
                 };
 

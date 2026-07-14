@@ -303,11 +303,11 @@ export function MediaRow({
                     <img
                         src={posterUrl}
                         alt=""
-                        className="w-20 shrink-0 object-cover"
+                        className="aspect-2/3 w-20 shrink-0 object-cover"
                         draggable={false}
                     />
                 ) : (
-                    <div className="flex w-20 shrink-0 items-center justify-center bg-muted">
+                    <div className="flex aspect-2/3 w-20 shrink-0 items-center justify-center bg-muted">
                         <FallbackIcon className="size-6 text-muted-foreground" />
                     </div>
                 )}
