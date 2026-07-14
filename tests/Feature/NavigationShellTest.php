@@ -23,7 +23,7 @@ it('renders each nav tab as its Inertia page for an authenticated user', functio
         ->assertInertia(fn (Assert $inertia) => $inertia->component($page));
 })->with(['shows', 'movies', 'search', 'profile']);
 
-it('sends logged-in users from the welcome page into the app', function () {
+it('sends logged-in users from the home route into the app', function () {
     $this->actingAs(User::factory()->create())
         ->get(route('home'))
         ->assertRedirect(route('shows', absolute: false));
@@ -98,20 +98,47 @@ it('uses the custom app icon as the favicon', function () {
 
 it('uses the Tracker branding throughout the React shell', function () {
     $icon = File::get(resource_path('js/components/app-logo-icon.tsx'));
-    $logo = File::get(resource_path('js/components/app-logo.tsx'));
     $trackerLayout = File::get(resource_path('js/layouts/tracker-layout.tsx'));
-    $welcome = File::get(resource_path('js/pages/welcome.tsx'));
 
     expect($icon)
         ->toContain('bg-emerald-500/15')
         ->toContain('<Play')
         ->not->toContain('<img')
-        ->and($logo)
-        ->toContain('TV Time')
-        ->not->toContain('Laravel Starter Kit')
         ->and($trackerLayout)
         ->toContain('<AppLogoIcon')
-        ->and($welcome)
-        ->toContain('<AppLogoIcon')
-        ->not->toContain('Laravel Logo');
+        ->toContain('TV Time')
+        ->not->toContain('Laravel Starter Kit');
+});
+
+it('renders settings with the tracker shell and no starter-kit app shell', function () {
+    $app = File::get(resource_path('js/app.tsx'));
+    $settingsLayout = File::get(resource_path('js/layouts/settings/layout.tsx'));
+
+    expect($app)
+        ->toContain('return [TrackerLayout, SettingsLayout]')
+        ->not->toContain('AppLayout')
+        ->and($settingsLayout)
+        ->toContain('<PageScrollArea>')
+        ->toContain("title: 'Account'")
+        ->toContain("title: 'Security'")
+        ->toContain("title: 'Appearance'");
+});
+
+it('keeps the Profile kebab menu inside settings and away from dashboard', function () {
+    $profileMenu = File::get(resource_path('js/components/profile-menu.tsx'));
+
+    expect($profileMenu)
+        ->toContain("label: 'Account'")
+        ->toContain("label: 'Security'")
+        ->toContain("label: 'Appearance'")
+        ->toContain('Log out')
+        ->not->toContain('dashboard');
+});
+
+it('has removed the unreachable starter-kit pages and layouts', function () {
+    expect(File::exists(resource_path('js/pages/dashboard.tsx')))->toBeFalse()
+        ->and(File::exists(resource_path('js/pages/welcome.tsx')))->toBeFalse()
+        ->and(File::exists(resource_path('js/layouts/app-layout.tsx')))->toBeFalse()
+        ->and(File::exists(resource_path('js/layouts/app/app-sidebar-layout.tsx')))->toBeFalse()
+        ->and(File::exists(resource_path('js/layouts/app/app-header-layout.tsx')))->toBeFalse();
 });

@@ -19,8 +19,10 @@ export default function AppearanceToggleTab({
 
     return (
         <div
+            role="group"
+            aria-label="Color theme"
             className={cn(
-                'inline-flex gap-1 rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800',
+                'grid w-full grid-cols-3 gap-1 rounded-xl bg-muted p-1 sm:w-fit',
                 className,
             )}
             {...props}
@@ -28,12 +30,14 @@ export default function AppearanceToggleTab({
             {tabs.map(({ value, icon: Icon, label }) => (
                 <button
                     key={value}
+                    type="button"
+                    aria-pressed={appearance === value}
                     onClick={() => updateAppearance(value)}
                     className={cn(
-                        'flex items-center rounded-md px-3.5 py-1.5 transition-colors',
+                        'flex min-h-10 items-center justify-center rounded-lg px-3.5 py-2 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring',
                         appearance === value
-                            ? 'bg-white shadow-xs dark:bg-neutral-700 dark:text-neutral-100'
-                            : 'text-neutral-500 hover:bg-neutral-200/60 hover:text-black dark:text-neutral-400 dark:hover:bg-neutral-700/60',
+                            ? 'bg-background text-foreground shadow-xs'
+                            : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
                     )}
                 >
                     <Icon className="-ml-1 h-4 w-4" />

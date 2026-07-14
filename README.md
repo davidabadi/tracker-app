@@ -161,6 +161,8 @@ even when the app's `.env` points at the Compose-internal Postgres.
   show-status transitions.
 - `app/Http/Controllers` — Inertia page + JSON detail endpoints.
 - `resources/js/pages` — React/Inertia pages (`shows`, `movies`, `search`,
-  `profile`, `*/upcoming`, `settings/*`, `auth/*`).
+  `profile`, `*/upcoming`, `settings/*`, `auth/*`). The account, security, and
+  appearance settings pages share the same responsive tracker shell as the main
+  navigation and are launched from Profile.
 - `routes/web.php`, `routes/settings.php`, `routes/console.php`.
 - `docker/`, `Dockerfile`, `docker-compose.yml` — the container stack.

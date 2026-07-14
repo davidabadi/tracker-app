@@ -21,7 +21,7 @@ import { edit as securitySettings } from '@/routes/security';
 
 const profileDestinations = [
     {
-        label: 'Account settings',
+        label: 'Account',
         href: accountSettings(),
         icon: UserRoundCog,
     },
@@ -45,7 +45,12 @@ export function ProfileMenu() {
                     <Ellipsis className="size-5" />
                 </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent
+                align="end"
+                sideOffset={6}
+                collisionPadding={12}
+                className="w-56"
+            >
                 <DropdownMenuGroup>
                     {profileDestinations.map((destination) => (
                         <DropdownMenuItem key={destination.label} asChild>
@@ -63,6 +68,7 @@ export function ProfileMenu() {
                         as="button"
                         className="w-full"
                         onClick={() => router.flushAll()}
+                        data-test="profile-menu-logout"
                     >
                         <LogOut />
                         Log out

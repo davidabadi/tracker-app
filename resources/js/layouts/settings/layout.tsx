@@ -1,78 +1,104 @@
 import { Link } from '@inertiajs/react';
+import { ArrowLeft, Palette, ShieldCheck, UserRoundCog } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
-import Heading from '@/components/heading';
-import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
+import { PageScrollArea } from '@/components/page-scroll-area';
 import { useCurrentUrl } from '@/hooks/use-current-url';
-import { cn, toUrl } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+import { profile } from '@/routes';
 import { edit as editAppearance } from '@/routes/appearance';
 import { edit } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
-import type { NavItem } from '@/types';
 
-const sidebarNavItems: NavItem[] = [
+type SettingsNavItem = {
+    title: string;
+    href: ReturnType<typeof edit>;
+    icon: LucideIcon;
+};
+
+const settingsNavItems: SettingsNavItem[] = [
     {
-        title: 'Profile',
+        title: 'Account',
         href: edit(),
-        icon: null,
+        icon: UserRoundCog,
     },
     {
         title: 'Security',
         href: editSecurity(),
-        icon: null,
+        icon: ShieldCheck,
     },
     {
         title: 'Appearance',
         href: editAppearance(),
-        icon: null,
+        icon: Palette,
     },
 ];
 
 export default function SettingsLayout({ children }: PropsWithChildren) {
-    const { isCurrentOrParentUrl } = useCurrentUrl();
+    const { isCurrentUrl } = useCurrentUrl();
 
     return (
-        <div className="px-4 py-6">
-            <Heading
-                title="Settings"
-                description="Manage your profile and account settings"
-            />
-
-            <div className="flex flex-col lg:flex-row lg:space-x-12">
-                <aside className="w-full max-w-xl lg:w-48">
-                    <nav
-                        className="flex flex-col space-y-1 space-x-0"
-                        aria-label="Settings"
+        <PageScrollArea>
+            <div className="mx-auto w-full max-w-4xl pb-8">
+                <header className="mb-5 flex items-start gap-3">
+                    <Link
+                        href={profile()}
+                        prefetch
+                        aria-label="Back to profile"
+                        className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
-                        {sidebarNavItems.map((item, index) => (
-                            <Button
-                                key={`${toUrl(item.href)}-${index}`}
-                                size="sm"
-                                variant="ghost"
-                                asChild
-                                className={cn('w-full justify-start', {
-                                    'bg-muted': isCurrentOrParentUrl(item.href),
-                                })}
-                            >
-                                <Link href={item.href}>
-                                    {item.icon && (
-                                        <item.icon className="h-4 w-4" />
+                        <ArrowLeft className="size-5" />
+                    </Link>
+                    <div>
+                        <h1 className="text-xl font-semibold tracking-tight">
+                            Settings
+                        </h1>
+                        <p className="text-sm text-muted-foreground">
+                            Manage your account, security, and appearance
+                        </p>
+                    </div>
+                </header>
+
+                <div className="grid gap-6 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-8">
+                    <nav
+                        className="grid grid-cols-3 gap-1 rounded-xl border border-border/60 bg-card/70 p-1 md:h-fit md:grid-cols-1 md:gap-1"
+                        aria-label="Settings categories"
+                    >
+                        {settingsNavItems.map((item) => {
+                            const active = isCurrentUrl(item.href);
+
+                            return (
+                                <Link
+                                    key={item.title}
+                                    href={item.href}
+                                    prefetch
+                                    aria-current={active ? 'page' : undefined}
+                                    className={cn(
+                                        'flex min-w-0 flex-col items-center gap-1 rounded-lg px-2 py-2.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring md:flex-row md:gap-2.5 md:px-3 md:text-sm',
+                                        active
+                                            ? 'bg-accent text-accent-foreground'
+                                            : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                                     )}
-                                    {item.title}
+                                >
+                                    <item.icon
+                                        className={cn(
+                                            'size-4.5 shrink-0',
+                                            active && 'text-emerald-400',
+                                        )}
+                                    />
+                                    <span className="truncate">
+                                        {item.title}
+                                    </span>
                                 </Link>
-                            </Button>
-                        ))}
+                            );
+                        })}
                     </nav>
-                </aside>
 
-                <Separator className="my-6 lg:hidden" />
-
-                <div className="flex-1 md:max-w-2xl">
-                    <section className="max-w-xl space-y-12">
+                    <section aria-label="Settings content" className="min-w-0">
                         {children}
                     </section>
                 </div>
             </div>
-        </div>
+        </PageScrollArea>
     );
 }

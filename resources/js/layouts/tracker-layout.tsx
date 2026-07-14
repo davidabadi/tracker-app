@@ -19,14 +19,30 @@ type TrackerNavItem = {
     title: string;
     href: ReturnType<typeof shows>;
     icon: LucideIcon;
+    additionalActivePaths?: string[];
 };
 
 const navItems: TrackerNavItem[] = [
     { title: 'Shows', href: shows(), icon: Tv },
     { title: 'Movies', href: movies(), icon: Film },
     { title: 'Search', href: search(), icon: Search },
-    { title: 'Profile', href: profile(), icon: UserRound },
+    {
+        title: 'Profile',
+        href: profile(),
+        icon: UserRound,
+        additionalActivePaths: ['/settings'],
+    },
 ];
+
+function useIsTrackerNavItemActive() {
+    const { currentUrl, isCurrentOrParentUrl } = useCurrentUrl();
+
+    return (item: TrackerNavItem): boolean =>
+        isCurrentOrParentUrl(item.href) ||
+        (item.additionalActivePaths ?? []).some(
+            (path) => currentUrl === path || currentUrl.startsWith(`${path}/`),
+        );
+}
 
 function TrackerWordmark() {
     return (
@@ -49,14 +65,14 @@ function TrackerWordmark() {
  * layout is being iterated on as the app grows.
  */
 function DesktopSidebar({ user }: { user: Auth['user'] }) {
-    const { isCurrentOrParentUrl } = useCurrentUrl();
+    const isActive = useIsTrackerNavItemActive();
 
     return (
         <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-border/60 bg-sidebar md:flex">
             <TrackerWordmark />
             <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
                 {navItems.map((item) => {
-                    const active = isCurrentOrParentUrl(item.href);
+                    const active = isActive(item);
 
                     return (
                         <Link
@@ -110,13 +126,13 @@ function DesktopSidebar({ user }: { user: Auth['user'] }) {
  * standalone PWA installs.
  */
 function BottomTabBar() {
-    const { isCurrentOrParentUrl } = useCurrentUrl();
+    const isActive = useIsTrackerNavItemActive();
 
     return (
         <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border/60 bg-background/85 backdrop-blur-lg md:hidden">
             <div className="mx-auto grid max-w-md grid-cols-4 gap-1 px-2 pt-1 pb-[max(env(safe-area-inset-bottom),0.25rem)]">
                 {navItems.map((item) => {
-                    const active = isCurrentOrParentUrl(item.href);
+                    const active = isActive(item);
 
                     return (
                         <Link

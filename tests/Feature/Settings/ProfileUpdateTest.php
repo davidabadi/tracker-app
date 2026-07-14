@@ -4,6 +4,7 @@ namespace Tests\Feature\Settings;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class ProfileUpdateTest extends TestCase
@@ -18,7 +19,17 @@ class ProfileUpdateTest extends TestCase
             ->actingAs($user)
             ->get(route('profile.edit'));
 
-        $response->assertOk();
+        $response->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('settings/profile')
+                ->has('mustVerifyEmail')
+            );
+    }
+
+    public function test_guests_are_redirected_from_the_account_page()
+    {
+        $this->get(route('profile.edit'))
+            ->assertRedirect(route('login'));
     }
 
     public function test_profile_information_can_be_updated()
