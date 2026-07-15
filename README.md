@@ -10,6 +10,9 @@ See [`docs/tracker-app-spec.md`](docs/tracker-app-spec.md) for the full
 functional spec, data model, and the implementation checklist (what's done vs.
 what's next).
 
+See [`docs/testing.md`](docs/testing.md) for the Pest, frontend unit, and
+Playwright test strategy and exact local commands.
+
 ## Highlights
 
 - **Per-user, private watch data.** Show/season/episode/movie metadata is shared

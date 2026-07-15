@@ -6,8 +6,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Movie;
 use App\Services\Metadata\Data\SearchResult;
+use App\Services\Metadata\MediaMetadataProvider;
 use App\Services\Metadata\Tmdb\TmdbException;
-use App\Services\Metadata\Tmdb\TmdbService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Cache;
  */
 class MovieController extends Controller
 {
-    public function __construct(private readonly TmdbService $tmdb) {}
+    public function __construct(private readonly MediaMetadataProvider $tmdb) {}
 
     public function show(Request $request, Movie $movie): JsonResponse
     {

@@ -4,6 +4,11 @@
 /public/build
 /public/fonts-manifest.dev.json
 /public/hot
+/playwright-report/
+/test-results/
+/blob-report/
+/tests/e2e/.auth/
+/database/e2e.sqlite
 /public/storage
 /storage/*.key
 /storage/pail

@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 /**
  * The near-fullscreen overlay the show/movie detail modals render inside: a
@@ -24,31 +24,77 @@ export function DetailModal({
     escapeDisabled?: boolean;
     children: React.ReactNode;
 }) {
-    useEffect(() => {
-        function handleKeydown(event: KeyboardEvent) {
-            if (event.key !== 'Escape' || escapeDisabled) {
-                return;
-            }
+    const modalRef = useRef<HTMLDivElement>(null);
 
+    useEffect(() => {
+        const previouslyFocusedElement =
+            document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+
+        modalRef.current
+            ?.querySelector<HTMLElement>('button:not([disabled])')
+            ?.focus();
+
+        function handleKeydown(event: KeyboardEvent) {
             const nestedDialogOpen = document.querySelector(
                 '[data-slot="dialog-content"][data-state="open"]',
             );
 
-            if (!nestedDialogOpen) {
+            if (
+                event.key === 'Escape' &&
+                !escapeDisabled &&
+                !nestedDialogOpen
+            ) {
                 onClose();
+
+                return;
+            }
+
+            if (event.key !== 'Tab' || nestedDialogOpen) {
+                return;
+            }
+
+            const focusableElements = Array.from(
+                modalRef.current?.querySelectorAll<HTMLElement>(
+                    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+                ) ?? [],
+            ).filter((element) => element.getClientRects().length > 0);
+
+            if (focusableElements.length === 0) {
+                event.preventDefault();
+                modalRef.current?.focus();
+
+                return;
+            }
+
+            const firstElement = focusableElements[0];
+            const lastElement = focusableElements.at(-1);
+
+            if (
+                (event.shiftKey && document.activeElement === firstElement) ||
+                (!event.shiftKey && document.activeElement === lastElement)
+            ) {
+                event.preventDefault();
+                (event.shiftKey ? lastElement : firstElement)?.focus();
             }
         }
 
         window.addEventListener('keydown', handleKeydown, true);
 
-        return () => window.removeEventListener('keydown', handleKeydown, true);
+        return () => {
+            window.removeEventListener('keydown', handleKeydown, true);
+            previouslyFocusedElement?.focus();
+        };
     }, [onClose, escapeDisabled]);
 
     return (
         <div
+            ref={modalRef}
             role="dialog"
             aria-modal="true"
             aria-label={label}
+            tabIndex={-1}
             className="fixed inset-0 z-[60] md:left-60"
         >
             <div aria-hidden="true" className="absolute inset-0 bg-black/60" />

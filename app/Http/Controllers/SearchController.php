@@ -9,8 +9,8 @@ use App\Models\User;
 use App\Services\Library\MediaLibraryService;
 use App\Services\Metadata\Data\MediaType;
 use App\Services\Metadata\Data\SearchResult;
+use App\Services\Metadata\MediaMetadataProvider;
 use App\Services\Metadata\Tmdb\TmdbException;
-use App\Services\Metadata\Tmdb\TmdbService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -31,7 +31,7 @@ use Inertia\Response;
  */
 class SearchController extends Controller
 {
-    public function __construct(private readonly TmdbService $tmdb) {}
+    public function __construct(private readonly MediaMetadataProvider $tmdb) {}
 
     /**
      * Render the search page; with a query, include TMDB results annotated

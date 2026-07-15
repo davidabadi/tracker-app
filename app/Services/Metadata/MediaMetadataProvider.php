@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Metadata;
 
+use App\Services\Metadata\Data\CollectionDetails;
 use App\Services\Metadata\Data\MovieDetails;
 use App\Services\Metadata\Data\SearchResult;
 use App\Services\Metadata\Data\ShowDetails;
@@ -51,4 +52,8 @@ interface MediaMetadataProvider
      * Fetch a movie's full metadata.
      */
     public function fetchMovieDetails(int $tmdbId): MovieDetails;
+
+    public function fetchMovieCollection(int $collectionId): CollectionDetails;
+
+    public function imageUrl(?string $path, string $size = 'w500'): ?string;
 }

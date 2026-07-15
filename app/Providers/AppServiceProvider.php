@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\Movie;
 use App\Models\Show;
+use App\Services\Metadata\FakeMetadataProvider;
 use App\Services\Metadata\MediaMetadataProvider;
 use App\Services\Metadata\Tmdb\TmdbService;
 use Carbon\CarbonImmutable;
@@ -28,7 +29,10 @@ class AppServiceProvider extends ServiceProvider
             imageBaseUrl: (string) config('services.tmdb.image_base_url'),
         ));
 
-        $this->app->bind(MediaMetadataProvider::class, TmdbService::class);
+        $this->app->bind(
+            MediaMetadataProvider::class,
+            app()->environment('e2e') ? FakeMetadataProvider::class : TmdbService::class,
+        );
     }
 
     /**
