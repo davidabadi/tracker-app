@@ -32,7 +32,12 @@ test('narrow viewport has no horizontal page overflow', async ({ page }) => {
 test('show detail dialog fits within a phone viewport', async ({ page }) => {
     await page.goto('/shows');
     await page
-        .getByRole('button', { name: 'Orbital Detectives', exact: true })
+        .getByRole('listitem')
+        .filter({ hasText: 'Unwatched Signal' })
+        .getByRole('button', {
+            name: 'Orbital Detectives',
+            exact: true,
+        })
         .click();
     const bounds = await page
         .getByRole('dialog', { name: 'Orbital Detectives' })
