@@ -1,4 +1,5 @@
 import { Check } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 /**
@@ -38,22 +39,45 @@ export function WatchedToggle({
     className?: string;
 }) {
     const watched = count > 0;
+    const [showActivationFeedback, setShowActivationFeedback] = useState(false);
+    const visuallyWatched = watched || showActivationFeedback;
+
+    useEffect(() => {
+        if (!showActivationFeedback) {
+            return;
+        }
+
+        const timeout = window.setTimeout(() => {
+            setShowActivationFeedback(false);
+        }, 700);
+
+        return () => window.clearTimeout(timeout);
+    }, [showActivationFeedback]);
+
+    function handleTap() {
+        if (!watched) {
+            setShowActivationFeedback(true);
+        }
+
+        onTap();
+    }
 
     return (
         <button
             type="button"
-            onClick={onTap}
-            aria-pressed={watched}
+            onClick={handleTap}
+            aria-pressed={visuallyWatched}
             aria-label={
-                watched
+                visuallyWatched
                     ? `Change watched status for ${label}`
                     : `Mark ${label} watched`
             }
             className={cn(
-                'flex size-11 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition-colors',
-                watched
+                'flex size-11 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition-[color,background-color,border-color,transform]',
+                visuallyWatched
                     ? 'border-emerald-500 bg-emerald-500 text-white'
                     : 'border-border bg-transparent text-muted-foreground/50 hover:border-foreground/40 hover:text-muted-foreground',
+                showActivationFeedback && 'animate-watched-toggle',
                 className,
             )}
         >

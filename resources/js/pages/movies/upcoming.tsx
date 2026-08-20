@@ -87,10 +87,12 @@ export default function MoviesUpcoming({
     return (
         <>
             <Head title="Movies" />
-            <Heading
-                title="Movies"
-                description="Your movie watch list and upcoming releases."
-            />
+            <div className="hidden md:block">
+                <Heading
+                    title="Movies"
+                    description="Your movie watch list and upcoming releases."
+                />
+            </div>
             <MediaSubTabs
                 tabs={[
                     { title: 'Watch List', href: movies() },

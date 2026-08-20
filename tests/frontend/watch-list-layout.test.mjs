@@ -78,3 +78,43 @@ test('a row remounted into another section releases its overlay lock', async () 
     assert.doesNotMatch(page, /onTransitionEnd=/);
     assert.match(styles, /@keyframes watch-sweep-out/);
 });
+
+test('show and movie page headings are hidden below the desktop breakpoint', async () => {
+    const pages = await Promise.all(
+        [
+            '../../resources/js/pages/shows.tsx',
+            '../../resources/js/pages/shows/upcoming.tsx',
+            '../../resources/js/pages/movies.tsx',
+            '../../resources/js/pages/movies/upcoming.tsx',
+        ].map((path) => readFile(new URL(path, import.meta.url), 'utf8')),
+    );
+
+    for (const page of pages) {
+        assert.match(page, /<div className="hidden md:block">\s*<Heading/);
+    }
+});
+
+test('an unwatched toggle turns green and animates immediately on tap', async () => {
+    const [toggle, styles] = await Promise.all([
+        readFile(
+            new URL(
+                '../../resources/js/components/watched-toggle.tsx',
+                import.meta.url,
+            ),
+            'utf8',
+        ),
+        readFile(
+            new URL('../../resources/css/app.css', import.meta.url),
+            'utf8',
+        ),
+    ]);
+
+    assert.match(toggle, /setShowActivationFeedback\(true\)/);
+    assert.match(toggle, /watched \|\| showActivationFeedback/);
+    assert.match(toggle, /animate-watched-toggle/);
+    assert.match(styles, /@keyframes watched-toggle-pop/);
+    assert.match(
+        styles,
+        /prefers-reduced-motion:[\s\S]*animate-watched-toggle/,
+    );
+});

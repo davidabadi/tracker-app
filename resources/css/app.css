@@ -178,6 +178,24 @@
     }
 }
 
+@keyframes watched-toggle-pop {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0
+            color-mix(in oklab, var(--color-emerald-500) 45%, transparent);
+    }
+    40% {
+        transform: scale(1.18);
+        box-shadow: 0 0 0 0.45rem transparent;
+    }
+    70% {
+        transform: scale(0.94);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
 .animate-watch-sweep {
     transform-origin: left;
     animation: watch-sweep 680ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
@@ -192,10 +210,15 @@
     animation: watch-sweep 440ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
+.animate-watched-toggle {
+    animation: watched-toggle-pop 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
     .animate-watch-sweep,
     .animate-watch-sweep-out,
-    .animate-status-sweep {
+    .animate-status-sweep,
+    .animate-watched-toggle {
         animation-duration: 1ms;
     }
 }

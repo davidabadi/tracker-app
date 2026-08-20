@@ -128,10 +128,12 @@ export default function ShowsUpcoming({
     return (
         <>
             <Head title="Shows" />
-            <Heading
-                title="Shows"
-                description="What you're watching and what's next."
-            />
+            <div className="hidden md:block">
+                <Heading
+                    title="Shows"
+                    description="What you're watching and what's next."
+                />
+            </div>
             <MediaSubTabs
                 tabs={[
                     { title: 'Watch List', href: shows() },
